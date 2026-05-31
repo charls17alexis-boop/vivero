@@ -52,18 +52,18 @@ app.use(async (req, res, next) => {
 initDatabase().then(() => { dbReady = true; });
 
 // ==================== AUTH ====================
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
 
   try {
-    const user = queryOne('SELECT * FROM usuarios WHERE username = ? AND activo = 1', [username]);
+    const user = await queryOne('SELECT * FROM usuarios WHERE username = ? AND activo = 1', [username]);
     if (!user) return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
 
     const valid = bcrypt.compareSync(password, user.password);
     if (!valid) return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
 
-    execute('UPDATE usuarios SET ultimo_acceso = datetime("now","localtime") WHERE id = ?', [user.id]);
+    await execute('UPDATE usuarios SET ultimo_acceso = datetime("now","localtime") WHERE id = ?', [user.id]);
     const token = crypto.randomBytes(32).toString('hex');
     sessions.set(token, { id: user.id, nombre: user.nombre, username: user.username, rol: user.rol, permisos: JSON.parse(user.permisos || '{}') });
 
@@ -74,7 +74,7 @@ app.post('/api/login', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/registrar', requireRole('Administrador'), (req, res) => {
+app.post('/api/registrar', requireRole('Administrador'), async (req, res) => {
   const { nombre, username, password, rol } = req.body;
   if (!nombre || !username || !password) return res.status(400).json({ error: 'Todos los campos requeridos' });
 
@@ -82,17 +82,17 @@ app.post('/api/registrar', requireRole('Administrador'), (req, res) => {
   if (errors.length > 0) return res.status(400).json({ error: errors.join('. ') });
 
   try {
-    const exists = queryOne('SELECT id FROM usuarios WHERE username = ?', [username]);
+    const exists = await queryOne('SELECT id FROM usuarios WHERE username = ?', [username]);
     if (exists) return res.status(400).json({ error: 'El usuario ya existe' });
 
     const hash = bcrypt.hashSync(password, 10);
-    execute('INSERT INTO usuarios (nombre, username, password, rol) VALUES (?,?,?,?)', [nombre, username, hash, rol || 'Vendedor']);
+    await execute('INSERT INTO usuarios (nombre, username, password, rol) VALUES (?,?,?,?)', [nombre, username, hash, rol || 'Vendedor']);
     res.json({ success: true, message: 'Usuario registrado' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Registro público desde login
-app.post('/api/register-public', (req, res) => {
+app.post('/api/register-public', async (req, res) => {
   const { nombre, username, password, rol } = req.body;
   if (!nombre || !username || !password) return res.status(400).json({ error: 'Todos los campos requeridos' });
 
@@ -100,17 +100,17 @@ app.post('/api/register-public', (req, res) => {
   if (errors.length > 0) return res.status(400).json({ error: errors.join('. ') });
 
   try {
-    const exists = queryOne('SELECT id FROM usuarios WHERE username = ?', [username]);
+    const exists = await queryOne('SELECT id FROM usuarios WHERE username = ?', [username]);
     if (exists) return res.status(400).json({ error: 'El usuario ya existe' });
 
     const hash = bcrypt.hashSync(password, 10);
     const finalRol = (rol === 'Administrador') ? 'Administrador' : 'Vendedor';
-    execute('INSERT INTO usuarios (nombre, username, password, rol) VALUES (?,?,?,?)', [nombre, username, hash, finalRol]);
+    await execute('INSERT INTO usuarios (nombre, username, password, rol) VALUES (?,?,?,?)', [nombre, username, hash, finalRol]);
     res.json({ success: true, message: 'Cuenta creada exitosamente' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/cambiar-password', requireRole('Administrador', 'Vendedor'), (req, res) => {
+app.put('/api/cambiar-password', requireRole('Administrador', 'Vendedor'), async (req, res) => {
   const { username, password_actual, password_nueva } = req.body;
   if (!username || !password_actual || !password_nueva) return res.status(400).json({ error: 'Campos requeridos' });
 
@@ -118,14 +118,14 @@ app.put('/api/cambiar-password', requireRole('Administrador', 'Vendedor'), (req,
   if (errors.length > 0) return res.status(400).json({ error: errors.join('. ') });
 
   try {
-    const user = queryOne('SELECT * FROM usuarios WHERE username = ?', [username]);
+    const user = await queryOne('SELECT * FROM usuarios WHERE username = ?', [username]);
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
 
     const valid = bcrypt.compareSync(password_actual, user.password);
     if (!valid) return res.status(401).json({ error: 'Contraseña actual incorrecta' });
 
     const hash = bcrypt.hashSync(password_nueva, 10);
-    execute('UPDATE usuarios SET password = ? WHERE id = ?', [hash, user.id]);
+    await execute('UPDATE usuarios SET password = ? WHERE id = ?', [hash, user.id]);
     res.json({ success: true, message: 'Contraseña actualizada' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -141,26 +141,26 @@ function validarPassword(password) {
 }
 
 // ==================== DASHBOARD ====================
-app.get('/api/dashboard', (req, res) => {
+app.get('/api/dashboard', async (req, res) => {
   try {
-    const plantasStock = queryOne("SELECT COALESCE(SUM(stock),0) as total FROM plantas WHERE activo = 1");
-    const ventasMes = queryOne("SELECT COALESCE(SUM(total),0) as total FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
-    const ventasMesAnt = queryOne("SELECT COALESCE(SUM(total),0) as total FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now', '-1 month')");
-    const ventasCount = queryOne("SELECT COUNT(*) as c FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
+    const plantasStock = await queryOne("SELECT COALESCE(SUM(stock),0) as total FROM plantas WHERE activo = 1");
+    const ventasMes = await queryOne("SELECT COALESCE(SUM(total),0) as total FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
+    const ventasMesAnt = await queryOne("SELECT COALESCE(SUM(total),0) as total FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now', '-1 month')");
+    const ventasCount = await queryOne("SELECT COUNT(*) as c FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
     const ticketProm = ventasCount.c > 0 ? (ventasMes.total / ventasCount.c) : 0;
 
-    const alertas = queryOne("SELECT COUNT(*) as c FROM plantas WHERE stock <= stock_minimo AND activo = 1");
-    const alertasCriticas = queryOne("SELECT COUNT(*) as c FROM plantas WHERE stock = 0 AND activo = 1");
-    const clientesActivos = queryOne("SELECT COUNT(*) as c FROM clientes WHERE activo = 1");
-    const clientesNuevosMes = queryOne("SELECT COUNT(*) as c FROM clientes WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
-    const personalActivo = queryOne("SELECT COUNT(*) as c FROM personal WHERE estado = 'Activo'");
-    const personalCampo = queryOne("SELECT COUNT(*) as c FROM personal WHERE area = 'Campo' AND estado = 'Activo'");
+    const alertas = await queryOne("SELECT COUNT(*) as c FROM plantas WHERE stock <= stock_minimo AND activo = 1");
+    const alertasCriticas = await queryOne("SELECT COUNT(*) as c FROM plantas WHERE stock = 0 AND activo = 1");
+    const clientesActivos = await queryOne("SELECT COUNT(*) as c FROM clientes WHERE activo = 1");
+    const clientesNuevosMes = await queryOne("SELECT COUNT(*) as c FROM clientes WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
+    const personalActivo = await queryOne("SELECT COUNT(*) as c FROM personal WHERE estado = 'Activo'");
+    const personalCampo = await queryOne("SELECT COUNT(*) as c FROM personal WHERE area = 'Campo' AND estado = 'Activo'");
 
-    const ventasHoy = queryOne("SELECT COALESCE(SUM(total),0) as total FROM ventas WHERE date(created_at) = date('now')");
+    const ventasHoy = await queryOne("SELECT COALESCE(SUM(total),0) as total FROM ventas WHERE date(created_at) = date('now')");
     const ventasTotal = ventasMes.total || 0;
     const gastosOperativos = Math.round(ventasTotal * 0.38);
 
-    const ventasCat = query(`
+    const ventasCat = await query(`
       SELECT p.categoria, COALESCE(SUM(vd.subtotal),0) as total
       FROM ventas_detalle vd JOIN plantas p ON vd.producto_id = p.id AND vd.producto_tipo = 'planta'
       JOIN ventas v ON vd.venta_id = v.id
@@ -168,14 +168,14 @@ app.get('/api/dashboard', (req, res) => {
       GROUP BY p.categoria
     `);
 
-    const ventasSemana = query(`
+    const ventasSemana = await query(`
       SELECT CAST(strftime('%W', created_at) AS INTEGER) - CAST(strftime('%W', date('now','start of month')) AS INTEGER) + 1 as semana,
              COALESCE(SUM(total),0) as total
       FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
       GROUP BY semana ORDER BY semana
     `);
 
-    const topProductos = query(`
+    const topProductos = await query(`
       SELECT vd.producto_nombre as nombre, SUM(vd.cantidad) as total
       FROM ventas_detalle vd
       WHERE strftime('%Y-%m', vd.created_at) = strftime('%Y-%m', 'now')
@@ -203,188 +203,188 @@ app.get('/api/dashboard', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/dashboard/alertas', (req, res) => {
-  try { res.json(query("SELECT nombre, stock, stock_minimo FROM plantas WHERE stock <= stock_minimo AND activo = 1 ORDER BY stock ASC")); }
+app.get('/api/dashboard/alertas', async (req, res) => {
+  try { res.json(await query("SELECT nombre, stock, stock_minimo FROM plantas WHERE stock <= stock_minimo AND activo = 1 ORDER BY stock ASC")); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==================== USUARIOS ====================
-app.get('/api/usuarios', (req, res) => {
-  try { res.json(query('SELECT id, nombre, username, rol, activo, ultimo_acceso, created_at FROM usuarios')); }
+app.get('/api/usuarios', async (req, res) => {
+  try { res.json(await query('SELECT id, nombre, username, rol, activo, ultimo_acceso, created_at FROM usuarios')); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/usuarios', requireRole('Administrador'), (req, res) => {
+app.post('/api/usuarios', requireRole('Administrador'), async (req, res) => {
   const { nombre, username, password, rol } = req.body;
   if (!nombre || !username || !password) return res.status(400).json({ error: 'Campos requeridos' });
   const errors = validarPassword(password);
   if (errors.length > 0) return res.status(400).json({ error: errors.join('. ') });
   try {
     const hash = bcrypt.hashSync(password, 10);
-    execute('INSERT INTO usuarios (nombre, username, password, rol) VALUES (?,?,?,?)', [nombre, username, hash, rol || 'Vendedor']);
+    await execute('INSERT INTO usuarios (nombre, username, password, rol) VALUES (?,?,?,?)', [nombre, username, hash, rol || 'Vendedor']);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/usuarios/:id', requireRole('Administrador'), (req, res) => {
+app.put('/api/usuarios/:id', requireRole('Administrador'), async (req, res) => {
   try {
     const { nombre, username, rol, activo, password } = req.body;
     if (password) {
       const errors = validarPassword(password);
       if (errors.length > 0) return res.status(400).json({ error: errors.join('. ') });
       const hash = bcrypt.hashSync(password, 10);
-      execute('UPDATE usuarios SET nombre=?, username=?, rol=?, activo=?, password=? WHERE id=?', [nombre, username, rol, activo ?? 1, hash, req.params.id]);
+      await execute('UPDATE usuarios SET nombre=?, username=?, rol=?, activo=?, password=? WHERE id=?', [nombre, username, rol, activo ?? 1, hash, req.params.id]);
     } else {
-      execute('UPDATE usuarios SET nombre=?, username=?, rol=?, activo=? WHERE id=?', [nombre, username, rol, activo ?? 1, req.params.id]);
+      await execute('UPDATE usuarios SET nombre=?, username=?, rol=?, activo=? WHERE id=?', [nombre, username, rol, activo ?? 1, req.params.id]);
     }
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/usuarios/:id', requireRole('Administrador'), (req, res) => {
-  try { execute('UPDATE usuarios SET activo=0 WHERE id=?', [req.params.id]); res.json({ success: true }); }
+app.delete('/api/usuarios/:id', requireRole('Administrador'), async (req, res) => {
+  try { await execute('UPDATE usuarios SET activo=0 WHERE id=?', [req.params.id]); res.json({ success: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/usuarios/:id/restore', requireRole('Administrador'), (req, res) => {
-  try { execute('UPDATE usuarios SET activo=1 WHERE id=?', [req.params.id]); res.json({ success: true }); }
+app.post('/api/usuarios/:id/restore', requireRole('Administrador'), async (req, res) => {
+  try { await execute('UPDATE usuarios SET activo=1 WHERE id=?', [req.params.id]); res.json({ success: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==================== PLANTAS ====================
-app.get('/api/plantas', (req, res) => {
-  try { res.json(query('SELECT * FROM plantas WHERE activo = 1')); }
+app.get('/api/plantas', async (req, res) => {
+  try { res.json(await query('SELECT * FROM plantas WHERE activo = 1')); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/plantas', requireRole('Administrador'), (req, res) => {
+app.post('/api/plantas', requireRole('Administrador'), async (req, res) => {
   try {
     const p = req.body;
-    const r = execute('INSERT INTO plantas (nombre, nombre_cientifico, categoria, precio, stock, stock_minimo, descripcion) VALUES (?,?,?,?,?,?,?)',
+    const r = await execute('INSERT INTO plantas (nombre, nombre_cientifico, categoria, precio, stock, stock_minimo, descripcion) VALUES (?,?,?,?,?,?,?)',
       [p.nombre, p.nombre_cientifico || null, p.categoria, p.precio, p.stock || 0, p.stock_minimo || 10, p.descripcion || null]);
     const id = r.lastId;
-    execute('INSERT INTO inventario (producto_tipo, producto_id, stock_actual, stock_minimo) VALUES (?,?,?,?)', ['planta', id, p.stock || 0, p.stock_minimo || 10]);
+    await execute('INSERT INTO inventario (producto_tipo, producto_id, stock_actual, stock_minimo) VALUES (?,?,?,?)', ['planta', id, p.stock || 0, p.stock_minimo || 10]);
     res.json({ success: true, id });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/plantas/:id', requireRole('Administrador'), (req, res) => {
+app.put('/api/plantas/:id', requireRole('Administrador'), async (req, res) => {
   try {
     const p = req.body;
-    execute('UPDATE plantas SET nombre=?, nombre_cientifico=?, categoria=?, precio=?, stock=?, stock_minimo=?, descripcion=? WHERE id=?',
+    await execute('UPDATE plantas SET nombre=?, nombre_cientifico=?, categoria=?, precio=?, stock=?, stock_minimo=?, descripcion=? WHERE id=?',
       [p.nombre, p.nombre_cientifico, p.categoria, p.precio, p.stock, p.stock_minimo, p.descripcion, req.params.id]);
-    execute('UPDATE inventario SET stock_actual=?, stock_minimo=? WHERE producto_tipo="planta" AND producto_id=?', [p.stock, p.stock_minimo, req.params.id]);
+    await execute('UPDATE inventario SET stock_actual=?, stock_minimo=? WHERE producto_tipo="planta" AND producto_id=?', [p.stock, p.stock_minimo, req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/plantas/:id', requireRole('Administrador'), (req, res) => {
-  try { execute('UPDATE plantas SET activo = 0 WHERE id = ?', [req.params.id]); res.json({ success: true }); }
+app.delete('/api/plantas/:id', requireRole('Administrador'), async (req, res) => {
+  try { await execute('UPDATE plantas SET activo = 0 WHERE id = ?', [req.params.id]); res.json({ success: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==================== CLIENTES ====================
-app.get('/api/clientes', (req, res) => {
-  try { res.json(query('SELECT * FROM clientes WHERE activo = 1')); }
+app.get('/api/clientes', async (req, res) => {
+  try { res.json(await query('SELECT * FROM clientes WHERE activo = 1')); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/clientes', requireRole('Administrador'), (req, res) => {
+app.post('/api/clientes', requireRole('Administrador'), async (req, res) => {
   try {
     const c = req.body;
-    execute('INSERT INTO clientes (nombre, tipo, telefono, email, rfc, limite_credito, direccion) VALUES (?,?,?,?,?,?,?)',
+    await execute('INSERT INTO clientes (nombre, tipo, telefono, email, rfc, limite_credito, direccion) VALUES (?,?,?,?,?,?,?)',
       [c.nombre, c.tipo || 'Particular', c.telefono || null, c.email || null, c.rfc || null, c.limite_credito || 0, c.direccion || null]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/clientes/:id', requireRole('Administrador'), (req, res) => {
+app.put('/api/clientes/:id', requireRole('Administrador'), async (req, res) => {
   try {
     const c = req.body;
-    execute('UPDATE clientes SET nombre=?, tipo=?, telefono=?, email=?, rfc=?, limite_credito=?, direccion=? WHERE id=?',
+    await execute('UPDATE clientes SET nombre=?, tipo=?, telefono=?, email=?, rfc=?, limite_credito=?, direccion=? WHERE id=?',
       [c.nombre, c.tipo, c.telefono, c.email, c.rfc, c.limite_credito, c.direccion, req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/clientes/:id', requireRole('Administrador'), (req, res) => {
-  try { execute('UPDATE clientes SET activo = 0 WHERE id = ?', [req.params.id]); res.json({ success: true }); }
+app.delete('/api/clientes/:id', requireRole('Administrador'), async (req, res) => {
+  try { await execute('UPDATE clientes SET activo = 0 WHERE id = ?', [req.params.id]); res.json({ success: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==================== HERRAMIENTAS ====================
-app.get('/api/herramientas', (req, res) => {
-  try { res.json(query('SELECT * FROM herramientas WHERE activo = 1')); }
+app.get('/api/herramientas', async (req, res) => {
+  try { res.json(await query('SELECT * FROM herramientas WHERE activo = 1')); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/herramientas', requireRole('Administrador'), (req, res) => {
+app.post('/api/herramientas', requireRole('Administrador'), async (req, res) => {
   try {
     const h = req.body;
-    execute('INSERT INTO herramientas (nombre, categoria, estado, responsable) VALUES (?,?,?,?)', [h.nombre, h.categoria, h.estado || 'Disponible', h.responsable || null]);
+    await execute('INSERT INTO herramientas (nombre, categoria, estado, responsable) VALUES (?,?,?,?)', [h.nombre, h.categoria, h.estado || 'Disponible', h.responsable || null]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/herramientas/:id', requireRole('Administrador'), (req, res) => {
+app.put('/api/herramientas/:id', requireRole('Administrador'), async (req, res) => {
   try {
     const h = req.body;
-    execute('UPDATE herramientas SET nombre=?, categoria=?, estado=?, responsable=? WHERE id=?', [h.nombre, h.categoria, h.estado, h.responsable, req.params.id]);
+    await execute('UPDATE herramientas SET nombre=?, categoria=?, estado=?, responsable=? WHERE id=?', [h.nombre, h.categoria, h.estado, h.responsable, req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/herramientas/:id', requireRole('Administrador'), (req, res) => {
-  try { execute('UPDATE herramientas SET activo = 0 WHERE id = ?', [req.params.id]); res.json({ success: true }); }
+app.delete('/api/herramientas/:id', requireRole('Administrador'), async (req, res) => {
+  try { await execute('UPDATE herramientas SET activo = 0 WHERE id = ?', [req.params.id]); res.json({ success: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==================== BIOFABRICA ====================
-app.get('/api/biofabrica', (req, res) => {
-  try { res.json(query('SELECT * FROM biofabrica_lotes')); }
+app.get('/api/biofabrica', async (req, res) => {
+  try { res.json(await query('SELECT * FROM biofabrica_lotes')); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/biofabrica', requireRole('Administrador'), (req, res) => {
+app.post('/api/biofabrica', requireRole('Administrador'), async (req, res) => {
   try {
     const l = req.body;
-    execute('INSERT INTO biofabrica_lotes (lote_id, producto, fecha_inicio, fecha_vencimiento, estado) VALUES (?,?,?,?,?)',
+    await execute('INSERT INTO biofabrica_lotes (lote_id, producto, fecha_inicio, fecha_vencimiento, estado) VALUES (?,?,?,?,?)',
       [l.lote_id, l.producto, l.fecha_inicio, l.fecha_vencimiento, l.estado || 'En proceso']);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==================== PERSONAL ====================
-app.get('/api/personal', (req, res) => {
-  try { res.json(query('SELECT * FROM personal WHERE activo = 1')); }
+app.get('/api/personal', async (req, res) => {
+  try { res.json(await query('SELECT * FROM personal WHERE activo = 1')); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/personal', requireRole('Administrador'), (req, res) => {
+app.post('/api/personal', requireRole('Administrador'), async (req, res) => {
   try {
     const e = req.body;
-    execute('INSERT INTO personal (nombre, puesto, area, turno, estado) VALUES (?,?,?,?,?)', [e.nombre, e.puesto, e.area, e.turno || 'Matutino', e.estado || 'Activo']);
+    await execute('INSERT INTO personal (nombre, puesto, area, turno, estado) VALUES (?,?,?,?,?)', [e.nombre, e.puesto, e.area, e.turno || 'Matutino', e.estado || 'Activo']);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/personal/:id', requireRole('Administrador'), (req, res) => {
+app.put('/api/personal/:id', requireRole('Administrador'), async (req, res) => {
   try {
     const e = req.body;
-    execute('UPDATE personal SET nombre=?, puesto=?, area=?, turno=?, estado=? WHERE id=?', [e.nombre, e.puesto, e.area, e.turno, e.estado, req.params.id]);
+    await execute('UPDATE personal SET nombre=?, puesto=?, area=?, turno=?, estado=? WHERE id=?', [e.nombre, e.puesto, e.area, e.turno, e.estado, req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/personal/:id', requireRole('Administrador'), (req, res) => {
-  try { execute('UPDATE personal SET activo = 0 WHERE id = ?', [req.params.id]); res.json({ success: true }); }
+app.delete('/api/personal/:id', requireRole('Administrador'), async (req, res) => {
+  try { await execute('UPDATE personal SET activo = 0 WHERE id = ?', [req.params.id]); res.json({ success: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==================== VENTAS ====================
-app.get('/api/ventas', (req, res) => {
+app.get('/api/ventas', async (req, res) => {
   try {
-    const ventas = query(`
+    const ventas = await query(`
       SELECT v.*, c.nombre as cliente_nombre, u.nombre as usuario_nombre
       FROM ventas v LEFT JOIN clientes c ON v.cliente_id = c.id
       LEFT JOIN usuarios u ON v.usuario_id = u.id
@@ -395,9 +395,9 @@ app.get('/api/ventas', (req, res) => {
 });
 
 // ESPECÍFICO antes de parámetro
-app.get('/api/ventas/pendientes-factura', (req, res) => {
+app.get('/api/ventas/pendientes-factura', async (req, res) => {
   try {
-    const pendientes = query(`
+    const pendientes = await query(`
       SELECT v.id, v.folio, v.total, v.created_at,
              c.nombre AS cliente_nombre, c.rfc,
              COALESCE(f.cfdi_estado, 'Pendiente') AS cfdi_estado
@@ -413,21 +413,21 @@ app.get('/api/ventas/pendientes-factura', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/ventas/:id', (req, res) => {
+app.get('/api/ventas/:id', async (req, res) => {
   try {
-    const venta = queryOne(`
+    const venta = await queryOne(`
       SELECT v.*, c.nombre as cliente_nombre, u.nombre as usuario_nombre
       FROM ventas v LEFT JOIN clientes c ON v.cliente_id = c.id
       LEFT JOIN usuarios u ON v.usuario_id = u.id
       WHERE v.id = ?
     `, [req.params.id]);
     if (!venta) return res.status(404).json({ error: 'Venta no encontrada' });
-    venta.productos = query('SELECT * FROM ventas_detalle WHERE venta_id = ?', [req.params.id]);
+    venta.productos = await query('SELECT * FROM ventas_detalle WHERE venta_id = ?', [req.params.id]);
     res.json(venta);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/ventas', requireRole('Administrador', 'Vendedor'), (req, res) => {
+app.post('/api/ventas', requireRole('Administrador', 'Vendedor'), async (req, res) => {
   try {
     const { cliente_id, metodo_pago, productos, usuario_id, tipo_venta, anticipo, fecha_programada } = req.body;
 
@@ -440,13 +440,13 @@ app.post('/api/ventas', requireRole('Administrador', 'Vendedor'), (req, res) => 
     const estado = tv === 'Normal' ? 'Pagado' : 'Pendiente';
 
     const folio = 'F-' + String(Date.now()).slice(-6);
-    const r = execute('INSERT INTO ventas (folio, cliente_id, total, metodo_pago, usuario_id, estado, tipo_venta, anticipo, saldo_pendiente, fecha_programada) VALUES (?,?,?,?,?,?,?,?,?,?)',
+    const r = await execute('INSERT INTO ventas (folio, cliente_id, total, metodo_pago, usuario_id, estado, tipo_venta, anticipo, saldo_pendiente, fecha_programada) VALUES (?,?,?,?,?,?,?,?,?,?)',
       [folio, cliente_id || null, total, metodo_pago || 'Efectivo', usuario_id || null, estado, tv, ant, saldo, fecha_programada || null]);
     const ventaId = r.lastId;
 
     for (const p of productos) {
       if (p.producto_tipo === 'planta') {
-        const planta = queryOne('SELECT stock FROM plantas WHERE id = ? AND activo = 1', [p.producto_id]);
+        const planta = await queryOne('SELECT stock FROM plantas WHERE id = ? AND activo = 1', [p.producto_id]);
         if (!planta) return res.status(400).json({ error: 'Producto no encontrado: ' + p.producto_nombre });
         if (planta.stock < p.cantidad) {
           return res.status(400).json({ error: 'Stock insuficiente para ' + p.producto_nombre + ': disponible ' + planta.stock + ', solicitado ' + p.cantidad });
@@ -455,40 +455,40 @@ app.post('/api/ventas', requireRole('Administrador', 'Vendedor'), (req, res) => 
     }
 
     for (const p of productos) {
-      execute('INSERT INTO ventas_detalle (venta_id, producto_tipo, producto_id, producto_nombre, cantidad, precio_unitario, subtotal) VALUES (?,?,?,?,?,?,?)',
+      await execute('INSERT INTO ventas_detalle (venta_id, producto_tipo, producto_id, producto_nombre, cantidad, precio_unitario, subtotal) VALUES (?,?,?,?,?,?,?)',
         [ventaId, p.producto_tipo, p.producto_id, p.producto_nombre, p.cantidad, p.precio_unitario, p.cantidad * p.precio_unitario]);
 
       if (p.producto_tipo === 'planta') {
-        execute('UPDATE plantas SET stock = stock - ? WHERE id = ?', [p.cantidad, p.producto_id]);
-        execute('UPDATE inventario SET stock_actual = stock_actual - ? WHERE producto_tipo="planta" AND producto_id=?', [p.cantidad, p.producto_id]);
+        await execute('UPDATE plantas SET stock = stock - ? WHERE id = ?', [p.cantidad, p.producto_id]);
+        await execute('UPDATE inventario SET stock_actual = stock_actual - ? WHERE producto_tipo="planta" AND producto_id=?', [p.cantidad, p.producto_id]);
       }
     }
 
     if (cliente_id) {
-      const ventasCliente = queryOne('SELECT COUNT(*) as c FROM ventas WHERE cliente_id = ?', [cliente_id]);
-      execute('UPDATE clientes SET compras_totales = ? WHERE id = ?', [ventasCliente.c, cliente_id]);
+      const ventasCliente = await queryOne('SELECT COUNT(*) as c FROM ventas WHERE cliente_id = ?', [cliente_id]);
+      await execute('UPDATE clientes SET compras_totales = ? WHERE id = ?', [ventasCliente.c, cliente_id]);
     }
 
     res.json({ success: true, folio, id: ventaId, total, saldo_pendiente: saldo });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/ventas/:id/abono', requireRole('Administrador', 'Vendedor'), (req, res) => {
+app.put('/api/ventas/:id/abono', requireRole('Administrador', 'Vendedor'), async (req, res) => {
   try {
     const { monto } = req.body;
-    const venta = queryOne('SELECT * FROM ventas WHERE id = ?', [req.params.id]);
+    const venta = await queryOne('SELECT * FROM ventas WHERE id = ?', [req.params.id]);
     if (!venta) return res.status(404).json({ error: 'Venta no encontrada' });
     const nuevoSaldo = Math.max(0, venta.saldo_pendiente - parseFloat(monto || 0));
     const nuevoEstado = nuevoSaldo <= 0 ? 'Pagado' : venta.estado;
-    execute('UPDATE ventas SET saldo_pendiente=?, estado=?, anticipo=anticipo+? WHERE id=?', [nuevoSaldo, nuevoEstado, parseFloat(monto || 0), req.params.id]);
+    await execute('UPDATE ventas SET saldo_pendiente=?, estado=?, anticipo=anticipo+? WHERE id=?', [nuevoSaldo, nuevoEstado, parseFloat(monto || 0), req.params.id]);
     res.json({ success: true, saldo_pendiente: nuevoSaldo, estado: nuevoEstado });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==================== INVENTARIO ====================
-app.get('/api/inventario', (req, res) => {
+app.get('/api/inventario', async (req, res) => {
   try {
-    const inventario = query(`
+    const inventario = await query(`
       SELECT i.*, p.nombre as producto_nombre, p.categoria
       FROM inventario i JOIN plantas p ON i.producto_id = p.id AND i.producto_tipo = 'planta'
       WHERE p.activo = 1 ORDER BY i.stock_actual ASC
@@ -497,54 +497,54 @@ app.get('/api/inventario', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/inventario/movimiento', requireRole('Administrador'), (req, res) => {
+app.post('/api/inventario/movimiento', requireRole('Administrador'), async (req, res) => {
   try {
     const { producto_id, tipo, cantidad, motivo, usuario_id } = req.body;
-    const inv = queryOne('SELECT * FROM inventario WHERE producto_tipo="planta" AND producto_id=?', [producto_id]);
+    const inv = await queryOne('SELECT * FROM inventario WHERE producto_tipo="planta" AND producto_id=?', [producto_id]);
     if (!inv) return res.status(404).json({ error: 'Producto no encontrado en inventario' });
 
     const ajuste = tipo === 'Entrada' ? cantidad : -cantidad;
-    execute('UPDATE inventario SET stock_actual = stock_actual + ?, ultima_actualizacion = datetime("now","localtime") WHERE id = ?', [ajuste, inv.id]);
-    execute('UPDATE plantas SET stock = stock + ? WHERE id = ?', [ajuste, producto_id]);
-    execute('INSERT INTO inventario_movimientos (inventario_id, producto_tipo, producto_id, tipo, cantidad, motivo, usuario_id) VALUES (?,?,?,?,?,?,?)',
+    await execute('UPDATE inventario SET stock_actual = stock_actual + ?, ultima_actualizacion = datetime("now","localtime") WHERE id = ?', [ajuste, inv.id]);
+    await execute('UPDATE plantas SET stock = stock + ? WHERE id = ?', [ajuste, producto_id]);
+    await execute('INSERT INTO inventario_movimientos (inventario_id, producto_tipo, producto_id, tipo, cantidad, motivo, usuario_id) VALUES (?,?,?,?,?,?,?)',
       [inv.id, 'planta', producto_id, tipo, cantidad, motivo, usuario_id || null]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==================== PROVEEDORES ====================
-app.get('/api/proveedores', (req, res) => {
-  try { res.json(query('SELECT * FROM proveedores WHERE activo = 1')); }
+app.get('/api/proveedores', async (req, res) => {
+  try { res.json(await query('SELECT * FROM proveedores WHERE activo = 1')); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/proveedores', requireRole('Administrador'), (req, res) => {
+app.post('/api/proveedores', requireRole('Administrador'), async (req, res) => {
   try {
     const p = req.body;
-    execute('INSERT INTO proveedores (nombre, contacto, telefono, email, producto_principal) VALUES (?,?,?,?,?)',
+    await execute('INSERT INTO proveedores (nombre, contacto, telefono, email, producto_principal) VALUES (?,?,?,?,?)',
       [p.nombre, p.contacto || null, p.telefono || null, p.email || null, p.producto_principal || null]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/proveedores/:id', requireRole('Administrador'), (req, res) => {
+app.put('/api/proveedores/:id', requireRole('Administrador'), async (req, res) => {
   try {
     const p = req.body;
-    execute('UPDATE proveedores SET nombre=?, contacto=?, telefono=?, email=?, producto_principal=? WHERE id=?',
+    await execute('UPDATE proveedores SET nombre=?, contacto=?, telefono=?, email=?, producto_principal=? WHERE id=?',
       [p.nombre, p.contacto, p.telefono, p.email, p.producto_principal, req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/proveedores/:id', requireRole('Administrador'), (req, res) => {
-  try { execute('UPDATE proveedores SET activo = 0 WHERE id = ?', [req.params.id]); res.json({ success: true }); }
+app.delete('/api/proveedores/:id', requireRole('Administrador'), async (req, res) => {
+  try { await execute('UPDATE proveedores SET activo = 0 WHERE id = ?', [req.params.id]); res.json({ success: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==================== ADQUISICION DE PLANTAS ====================
-app.get('/api/adquisiciones', (req, res) => {
+app.get('/api/adquisiciones', async (req, res) => {
   try {
-    const items = query(`
+    const items = await query(`
       SELECT a.*, u.nombre as usuario_nombre
       FROM adquisicion_plantas a LEFT JOIN usuarios u ON a.usuario_id = u.id
       ORDER BY a.created_at DESC
@@ -553,11 +553,11 @@ app.get('/api/adquisiciones', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/adquisiciones/:id', (req, res) => {
+app.get('/api/adquisiciones/:id', async (req, res) => {
   try {
-    const item = queryOne('SELECT * FROM adquisicion_plantas WHERE id = ?', [req.params.id]);
+    const item = await queryOne('SELECT * FROM adquisicion_plantas WHERE id = ?', [req.params.id]);
     if (!item) return res.status(404).json({ error: 'Adquisición no encontrada' });
-    item.productos = query(`
+    item.productos = await query(`
       SELECT ad.*, p.nombre as planta_nombre, p.categoria
       FROM adquisicion_detalle ad LEFT JOIN plantas p ON ad.planta_id = p.id
       WHERE ad.adquisicion_id = ?
@@ -566,35 +566,35 @@ app.get('/api/adquisiciones/:id', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/adquisiciones', requireRole('Administrador'), (req, res) => {
+app.post('/api/adquisiciones', requireRole('Administrador'), async (req, res) => {
   try {
     const { proveedor, fecha_adquisicion, productos, observaciones, usuario_id } = req.body;
     let total = 0;
     for (const p of (productos || [])) total += (p.cantidad || 0) * (p.precio_unitario || 0);
     const folio = 'ADQ-' + String(Date.now()).slice(-6);
-    const result = execute('INSERT INTO adquisicion_plantas (folio, proveedor, fecha_adquisicion, total, observaciones, usuario_id) VALUES (?,?,?,?,?,?)',
+    const result = await execute('INSERT INTO adquisicion_plantas (folio, proveedor, fecha_adquisicion, total, observaciones, usuario_id) VALUES (?,?,?,?,?,?)',
       [folio, proveedor, fecha_adquisicion || new Date().toISOString().split('T')[0], total, observaciones || null, usuario_id || null]);
     const adqId = result.lastId;
     for (const p of (productos || [])) {
-      execute('INSERT INTO adquisicion_detalle (adquisicion_id, planta_id, variedad, cantidad, precio_unitario, subtotal) VALUES (?,?,?,?,?,?)',
+      await execute('INSERT INTO adquisicion_detalle (adquisicion_id, planta_id, variedad, cantidad, precio_unitario, subtotal) VALUES (?,?,?,?,?,?)',
         [adqId, p.planta_id, p.variedad || null, p.cantidad || 1, p.precio_unitario || 0, (p.cantidad || 1) * (p.precio_unitario || 0)]);
-      execute('UPDATE plantas SET stock = stock + ? WHERE id = ?', [p.cantidad || 0, p.planta_id]);
-      execute('UPDATE inventario SET stock_actual = stock_actual + ? WHERE producto_tipo="planta" AND producto_id=?', [p.cantidad || 0, p.planta_id]);
+      await execute('UPDATE plantas SET stock = stock + ? WHERE id = ?', [p.cantidad || 0, p.planta_id]);
+      await execute('UPDATE inventario SET stock_actual = stock_actual + ? WHERE producto_tipo="planta" AND producto_id=?', [p.cantidad || 0, p.planta_id]);
     }
     res.json({ success: true, folio, id: adqId });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==================== CALIDAD ====================
-app.get('/api/calidad', (req, res) => {
-  try { res.json(query('SELECT * FROM calidad_inspecciones ORDER BY created_at DESC')); }
+app.get('/api/calidad', async (req, res) => {
+  try { res.json(await query('SELECT * FROM calidad_inspecciones ORDER BY created_at DESC')); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/calidad', requireRole('Administrador'), (req, res) => {
+app.post('/api/calidad', requireRole('Administrador'), async (req, res) => {
   try {
     const c = req.body;
-    execute('INSERT INTO calidad_inspecciones (lote_producto, inspector, fecha, estado_fitosanitario, calificacion, observaciones) VALUES (?,?,?,?,?,?)',
+    await execute('INSERT INTO calidad_inspecciones (lote_producto, inspector, fecha, estado_fitosanitario, calificacion, observaciones) VALUES (?,?,?,?,?,?)',
       [c.lote_producto, c.inspector, c.fecha, c.estado_fitosanitario, c.calificacion || 5, c.observaciones || null]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -602,9 +602,9 @@ app.post('/api/calidad', requireRole('Administrador'), (req, res) => {
 
 // ==================== AGENDA ====================
 // ==================== FACTURACION ====================
-app.get('/api/facturacion', (req, res) => {
+app.get('/api/facturacion', async (req, res) => {
   try {
-    const facturas = query(`
+    const facturas = await query(`
       SELECT f.*, v.folio, v.total, v.metodo_pago, c.nombre as cliente_nombre
       FROM facturacion f JOIN ventas v ON f.venta_id = v.id
       LEFT JOIN clientes c ON v.cliente_id = c.id
@@ -614,31 +614,31 @@ app.get('/api/facturacion', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/facturacion/:id', requireRole('Administrador'), (req, res) => {
+app.delete('/api/facturacion/:id', requireRole('Administrador'), async (req, res) => {
   try {
-    execute('DELETE FROM facturacion WHERE id = ?', [req.params.id]);
+    await execute('DELETE FROM facturacion WHERE id = ?', [req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/facturacion/cancelar-pendiente', requireRole('Administrador'), (req, res) => {
+app.post('/api/facturacion/cancelar-pendiente', requireRole('Administrador'), async (req, res) => {
   try {
     const { venta_id } = req.body;
-    execute('DELETE FROM facturacion WHERE venta_id = ? AND cfdi_estado = \'Pendiente\'', [venta_id]);
+    await execute('DELETE FROM facturacion WHERE venta_id = ? AND cfdi_estado = \'Pendiente\'', [venta_id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==================== FACTURACION (timbrar) ====================
-app.post('/api/facturacion/timbrar', requireRole('Administrador'), (req, res) => {
+app.post('/api/facturacion/timbrar', requireRole('Administrador'), async (req, res) => {
   try {
     const { venta_id, rfc, razon_social, uso_cfdi, regimen_fiscal_receptor, codigo_postal } = req.body;
     if (!venta_id || !rfc) return res.status(400).json({ error: 'venta_id y RFC requeridos' });
 
-    const venta = queryOne('SELECT * FROM ventas WHERE id = ?', [venta_id]);
+    const venta = await queryOne('SELECT * FROM ventas WHERE id = ?', [venta_id]);
     if (!venta) return res.status(404).json({ error: 'Venta no encontrada' });
 
-    const existente = queryOne('SELECT * FROM facturacion WHERE venta_id = ? AND cfdi_estado = ?', [venta_id, 'Timbrato']);
+    const existente = await queryOne('SELECT * FROM facturacion WHERE venta_id = ? AND cfdi_estado = ?', [venta_id, 'Timbrato']);
     if (existente) return res.status(400).json({ error: 'Esta venta ya tiene un CFDI timbrado' });
 
     const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); });
@@ -646,9 +646,9 @@ app.post('/api/facturacion/timbrar', requireRole('Administrador'), (req, res) =>
     const fechaTimbrado = new Date().toISOString();
 
     // Eliminar registros previos (Pendiente/Cancelado) para esta venta
-    execute('DELETE FROM facturacion WHERE venta_id = ? AND cfdi_estado != ?', [venta_id, 'Timbrato']);
+    await execute('DELETE FROM facturacion WHERE venta_id = ? AND cfdi_estado != ?', [venta_id, 'Timbrato']);
 
-    execute(
+    await execute(
       `INSERT INTO facturacion (venta_id, folio_fiscal, rfc, razon_social, uso_cfdi, regimen_fiscal_receptor, codigo_postal, uuid, fecha_timbrado, cfdi_estado)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Timbrato')`,
       [venta_id, folioFiscal, rfc, razon_social || null, uso_cfdi || null, regimen_fiscal_receptor || null, codigo_postal || null, uuid, fechaTimbrado]
@@ -658,28 +658,28 @@ app.post('/api/facturacion/timbrar', requireRole('Administrador'), (req, res) =>
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/facturacion/:id/cancelar', requireRole('Administrador'), (req, res) => {
+app.put('/api/facturacion/:id/cancelar', requireRole('Administrador'), async (req, res) => {
   try {
-    const fact = queryOne('SELECT * FROM facturacion WHERE id = ?', [req.params.id]);
+    const fact = await queryOne('SELECT * FROM facturacion WHERE id = ?', [req.params.id]);
     if (!fact) return res.status(404).json({ error: 'Factura no encontrada' });
     if (fact.cfdi_estado !== 'Timbrato') return res.status(400).json({ error: 'Solo se pueden cancelar CFDI en estado Timbrato' });
-    execute('UPDATE facturacion SET cfdi_estado=\'Cancelado\', uuid=NULL, fecha_timbrado=NULL WHERE id=?', [req.params.id]);
+    await execute('UPDATE facturacion SET cfdi_estado=\'Cancelado\', uuid=NULL, fecha_timbrado=NULL WHERE id=?', [req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Generar PDF de factura
-app.get('/api/facturacion/pdf/:ventaId', (req, res) => {
+app.get('/api/facturacion/pdf/:ventaId', async (req, res) => {
   try {
-    const venta = queryOne(`
+    const venta = await queryOne(`
       SELECT v.*, c.nombre as cliente_nombre, c.rfc as cliente_rfc
       FROM ventas v LEFT JOIN clientes c ON v.cliente_id = c.id
       WHERE v.id = ?
     `, [req.params.ventaId]);
     if (!venta) return res.status(404).json({ error: 'Venta no encontrada' });
 
-    const productos = query('SELECT * FROM ventas_detalle WHERE venta_id = ?', [req.params.ventaId]);
-    const factura = queryOne('SELECT * FROM facturacion WHERE venta_id = ?', [req.params.ventaId]);
+    const productos = await query('SELECT * FROM ventas_detalle WHERE venta_id = ?', [req.params.ventaId]);
+    const factura = await queryOne('SELECT * FROM facturacion WHERE venta_id = ?', [req.params.ventaId]);
     if (!factura) return res.status(404).json({ error: 'Factura no encontrada' });
 
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
@@ -789,7 +789,7 @@ app.get('/api/facturacion/pdf/:ventaId', (req, res) => {
 });
 
 // ==================== REPORTES PDF ====================
-app.get('/api/reportes/pdf', (req, res) => {
+app.get('/api/reportes/pdf', async (req, res) => {
   try {
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
     res.setHeader('Content-Type', 'application/pdf');
@@ -804,10 +804,10 @@ app.get('/api/reportes/pdf', (req, res) => {
     doc.fontSize(9).fillColor('#666').text('Generado: ' + new Date().toLocaleString('es-MX'), { align: 'center' });
     doc.moveDown(1);
 
-    const ventasMes = queryOne("SELECT COALESCE(SUM(total),0) as t FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
-    const unidadesVendidas = queryOne("SELECT COALESCE(SUM(vd.cantidad),0) as t FROM ventas_detalle vd JOIN ventas v ON vd.venta_id = v.id WHERE strftime('%Y-%m', v.created_at) = strftime('%Y-%m', 'now')");
-    const clientesNuevos = queryOne("SELECT COUNT(*) as c FROM clientes WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
-    const totalVentas = queryOne("SELECT COALESCE(SUM(total),0) as t FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
+    const ventasMes = await queryOne("SELECT COALESCE(SUM(total),0) as t FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
+    const unidadesVendidas = await queryOne("SELECT COALESCE(SUM(vd.cantidad),0) as t FROM ventas_detalle vd JOIN ventas v ON vd.venta_id = v.id WHERE strftime('%Y-%m', v.created_at) = strftime('%Y-%m', 'now')");
+    const clientesNuevos = await queryOne("SELECT COUNT(*) as c FROM clientes WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
+    const totalVentas = await queryOne("SELECT COALESCE(SUM(total),0) as t FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
     const gastosOp = (totalVentas?.t || 0) * 0.38;
 
     doc.fillColor('#2d6a4f').fontSize(14).font('Helvetica-Bold').text('Resumen Ejecutivo', { underline: true });
@@ -832,7 +832,7 @@ app.get('/api/reportes/pdf', (req, res) => {
 
     doc.moveDown(1);
 
-    const topProductos = query(`
+    const topProductos = await query(`
       SELECT vd.producto_nombre, SUM(vd.cantidad) as total FROM ventas_detalle vd
       JOIN ventas v ON vd.venta_id = v.id
       WHERE strftime('%Y-%m', v.created_at) = strftime('%Y-%m', 'now')
@@ -853,7 +853,7 @@ app.get('/api/reportes/pdf', (req, res) => {
 
     doc.moveDown(1);
 
-    const alertas = query("SELECT nombre, stock, stock_minimo FROM plantas WHERE stock <= stock_minimo AND activo = 1 ORDER BY stock ASC");
+    const alertas = await query("SELECT nombre, stock, stock_minimo FROM plantas WHERE stock <= stock_minimo AND activo = 1 ORDER BY stock ASC");
     if (alertas.length > 0) {
       doc.fillColor('#c0392b').fontSize(14).font('Helvetica-Bold').text('Alertas de Inventario', { underline: true });
       doc.fillColor('#000').moveDown(0.3);
@@ -866,7 +866,7 @@ app.get('/api/reportes/pdf', (req, res) => {
 
     doc.moveDown(1);
 
-    const ventasPorSemana = query(`
+    const ventasPorSemana = await query(`
       SELECT CAST(strftime('%W', created_at) AS INTEGER) - CAST(strftime('%W', date('now','start of month')) AS INTEGER) + 1 as semana,
              SUM(total) as total
       FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
