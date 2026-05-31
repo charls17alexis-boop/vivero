@@ -1,0 +1,1999 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vivero — Sistema de Gestión</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --verde: #2d6a4f;
+  --verde-claro: #40916c;
+  --verde-menta: #74c69d;
+  --verde-suave: #d8f3dc;
+  --tierra: #8b5e3c;
+  --tierra-claro: #c9a07a;
+  --crema: #faf6f0;
+  --blanco: #ffffff;
+  --gris-oscuro: #1a1a1a;
+  --gris: #4a4a4a;
+  --gris-claro: #e8e4de;
+  --rojo: #c0392b;
+  --rojo-suave: #fde8e8;
+  --amarillo: #f39c12;
+  --amarillo-suave: #fef9e7;
+  --azul: #2980b9;
+  --azul-suave: #eaf4fb;
+  --sidebar-w: 240px;
+  --shadow: 0 2px 12px rgba(0,0,0,0.07);
+  --radius: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--crema);
+  color: var(--gris-oscuro);
+  display: flex;
+  min-height: 100vh;
+  font-size: 14px;
+}
+#sidebar {
+  width: var(--sidebar-w);
+  background: var(--verde);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 100;
+  overflow-y: auto;
+}
+.sidebar-logo { padding: 28px 20px 20px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+.sidebar-logo h1 { font-family: 'DM Serif Display', serif; font-size: 22px; letter-spacing: 0.5px; }
+.sidebar-logo span { font-size: 11px; opacity: 0.65; display: block; margin-top: 2px; }
+.sidebar-user { padding: 14px 20px; background: rgba(255,255,255,0.08); margin: 12px; border-radius: 8px; font-size: 12px; }
+.sidebar-user strong { display: block; font-size: 13px; }
+.sidebar-user small { opacity: 0.7; }
+.menu-label { font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; opacity: 0.5; padding: 14px 20px 6px; }
+.menu-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; cursor: pointer; border-left: 3px solid transparent; transition: all 0.15s; font-size: 13px; opacity: 0.8; }
+.menu-item:hover { background: rgba(255,255,255,0.1); opacity: 1; }
+.menu-item.active { background: rgba(255,255,255,0.15); border-left-color: var(--verde-menta); opacity: 1; font-weight: 500; }
+.menu-item .icon { font-size: 16px; width: 20px; text-align: center; }
+.sidebar-bottom { margin-top: auto; padding: 16px; border-top: 1px solid rgba(255,255,255,0.12); }
+.btn-logout { width: 100%; background: rgba(255,255,255,0.1); border: none; color: white; padding: 9px; border-radius: 8px; cursor: pointer; font-size: 13px; font-family: 'DM Sans', sans-serif; transition: background 0.15s; }
+.btn-logout:hover { background: rgba(255,255,255,0.2); }
+
+#main { margin-left: var(--sidebar-w); flex: 1; padding: 30px; max-width: calc(100vw - var(--sidebar-w)); }
+.page { display: none; }
+.page.active { display: block; }
+.page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
+.page-title { font-family: 'DM Serif Display', serif; font-size: 26px; }
+.page-subtitle { font-size: 12px; color: var(--gris); margin-top: 3px; }
+
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 24px; }
+.stat-card { background: white; border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); border-left: 4px solid var(--verde-claro); }
+.stat-card.danger { border-left-color: var(--rojo); }
+.stat-card.warn { border-left-color: var(--amarillo); }
+.stat-card.info { border-left-color: var(--azul); }
+.stat-card .label { font-size: 11px; color: var(--gris); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-card .value { font-size: 28px; font-weight: 600; margin-top: 4px; color: var(--verde); }
+.stat-card.danger .value { color: var(--rojo); }
+.stat-card.warn .value { color: var(--amarillo); }
+.stat-card.info .value { color: var(--azul); }
+.stat-card .change { font-size: 11px; color: var(--gris); margin-top: 2px; }
+
+.card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 20px; }
+.card-header { padding: 16px 20px; border-bottom: 1px solid var(--gris-claro); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.card-title { font-weight: 600; font-size: 14px; }
+.card-body { padding: 0; }
+.card-body-pad { padding: 20px; }
+
+table { width: 100%; border-collapse: collapse; }
+th { background: #f7f4ef; text-align: left; padding: 10px 16px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gris); }
+td { padding: 11px 16px; border-bottom: 1px solid var(--gris-claro); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #faf9f7; }
+
+.badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+.badge-green { background: var(--verde-suave); color: var(--verde); }
+.badge-red { background: var(--rojo-suave); color: var(--rojo); }
+.badge-yellow { background: var(--amarillo-suave); color: #856404; }
+.badge-blue { background: var(--azul-suave); color: var(--azul); }
+.badge-gray { background: var(--gris-claro); color: var(--gris); }
+
+.btn { padding: 7px 14px; border-radius: 7px; border: none; cursor: pointer; font-size: 12px; font-family: 'DM Sans', sans-serif; font-weight: 500; transition: all 0.15s; display: inline-flex; align-items: center; gap: 5px; }
+.btn-primary { background: var(--verde); color: white; }
+.btn-primary:hover { background: var(--verde-claro); }
+.btn-danger { background: var(--rojo-suave); color: var(--rojo); }
+.btn-danger:hover { background: #fbd3d3; }
+.btn-edit { background: var(--azul-suave); color: var(--azul); }
+.btn-edit:hover { background: #d5eaf6; }
+.btn-warn { background: var(--amarillo-suave); color: #856404; }
+.btn-warn:hover { background: #fdefc3; }
+.btn-outline { background: white; color: var(--gris-oscuro); border: 1px solid var(--gris-claro); }
+.btn-outline:hover { background: var(--crema); }
+.btn-sm { padding: 4px 10px; font-size: 11px; }
+
+.actions { display: flex; gap: 6px; }
+.search-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.search-bar input, .search-bar select { padding: 7px 12px; border: 1px solid var(--gris-claro); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 13px; background: white; outline: none; transition: border 0.15s; }
+.search-bar input:focus, .search-bar select:focus { border-color: var(--verde-claro); }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; display: none; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: white; border-radius: 14px; padding: 28px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+.modal h3 { font-family: 'DM Serif Display', serif; font-size: 20px; margin-bottom: 20px; }
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 5px; color: var(--gris); }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--gris-claro); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 13px; outline: none; transition: border 0.15s; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--verde-claro); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+.alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+.alert-red { background: var(--rojo-suave); color: var(--rojo); border-left: 4px solid var(--rojo); }
+.alert-yellow { background: var(--amarillo-suave); color: #856404; border-left: 4px solid var(--amarillo); }
+.alert-green { background: var(--verde-suave); color: var(--verde); border-left: 4px solid var(--verde-claro); }
+
+.chart-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.chart-bar-label { width: 110px; font-size: 12px; color: var(--gris); text-align: right; }
+.chart-bar-track { flex: 1; height: 18px; background: var(--gris-claro); border-radius: 4px; overflow: hidden; }
+.chart-bar-fill { height: 100%; background: var(--verde-claro); border-radius: 4px; transition: width 0.5s; }
+.chart-bar-val { width: 50px; font-size: 12px; font-weight: 500; }
+
+
+.log-entry { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--gris-claro); font-size: 12px; }
+.log-entry:last-child { border-bottom: none; }
+.log-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--verde-claro); margin-top: 4px; flex-shrink: 0; }
+.log-dot.rojo { background: var(--rojo); }
+.log-dot.amarillo { background: var(--amarillo); }
+.log-time { color: var(--gris); min-width: 130px; }
+
+#login-page { position: fixed; inset: 0; background: var(--crema); display: flex; align-items: center; justify-content: center; z-index: 999; }
+.login-box { background: white; padding: 40px; border-radius: 16px; width: 380px; box-shadow: 0 8px 40px rgba(0,0,0,0.1); text-align: center; }
+.login-box h1 { font-family: 'DM Serif Display', serif; font-size: 32px; color: var(--verde); }
+.login-sep { border: none; border-top: 2px dashed var(--gris-claro); margin: 16px 0; }
+.login-box > p { font-size: 13px; color: var(--gris); margin-bottom: 16px; }
+.login-box input { width: 100%; padding: 10px 14px; border: 1px solid var(--gris-claro); border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 14px; margin-bottom: 10px; outline: none; }
+.login-box input:focus { border-color: var(--verde-claro); }
+.login-box button { width: 100%; padding: 11px; background: var(--verde); color: white; border: none; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; margin-top: 6px; transition: background 0.15s; }
+.login-box button:hover { background: var(--verde-claro); }
+.login-error { color: var(--rojo); font-size: 12px; margin-top: 8px; display: none; }
+.login-hint { margin-top: 14px; font-size: 11px; color: var(--gris); }
+
+#toast { position: fixed; bottom: 24px; right: 24px; background: var(--verde); color: white; padding: 12px 20px; border-radius: 8px; font-size: 13px; z-index: 500; opacity: 0; transform: translateY(10px); transition: all 0.3s; pointer-events: none; }
+#toast.show { opacity: 1; transform: translateY(0); }
+#toast.error { background: var(--rojo); }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+
+.val-error { color: var(--rojo); font-size: 11px; margin-top: 3px; display: none; }
+.val-ok { color: var(--verde); font-size: 11px; margin-top: 3px; display: none; }
+.pw-checklist { text-align: left; font-size: 11px; margin-top: 4px; padding: 8px; background: #f9f9f9; border-radius: 6px; }
+.pw-checklist li { list-style: none; margin: 2px 0; }
+.pw-checklist li.ok { color: var(--verde); }
+.pw-checklist li.no { color: var(--rojo); }
+
+.empty-state { text-align: center; padding: 40px 20px; color: var(--gris); font-size: 13px; }
+.empty-state .icon { font-size: 40px; margin-bottom: 10px; }
+
+@media (max-width: 768px) {
+  #sidebar { width: 200px; }
+  #main { margin-left: 200px; padding: 16px; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div id="login-page">
+  <div class="login-box">
+    <h1>Vivero</h1>
+    <hr class="login-sep">
+    <p>Inicie Sesión para acceder</p>
+    <input type="text" id="login-user" placeholder="Usuario" autocomplete="username">
+    <div style="position:relative">
+      <input type="password" id="login-pass" placeholder="Contraseña" autocomplete="current-password" style="width:100%;padding:10px 40px 10px 14px;border:2px solid var(--gris-claro);border-radius:8px;font-size:13px;outline:none;transition:border-color 0.2s">
+      <span id="toggle-pass" onclick="togglePassword()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;color:var(--gris);user-select:none">&#x1F441;</span>
+    </div>
+    <button onclick="doLogin()">INGRESAR</button>
+    <div class="login-error" id="login-error">Usuario o contraseña incorrectos</div>
+    <div style="text-align:center;margin-top:12px;font-size:12px;color:var(--gris)">
+      ¿No tienes cuenta? <a href="#" onclick="toggleRegistro();return false" id="link-registro" style="color:var(--verde);font-weight:600">Crear cuenta</a>
+    </div>
+    <div id="registro-form" style="display:none;margin-top:12px;border-top:1px solid var(--gris-claro);padding-top:12px">
+      <input type="text" id="reg-nombre" placeholder="Nombre completo">
+      <input type="text" id="reg-user" placeholder="Usuario">
+      <div style="position:relative">
+        <input type="password" id="reg-pass" placeholder="Contraseña" style="width:100%;padding:10px 40px 10px 14px;border:2px solid var(--gris-claro);border-radius:8px;font-size:13px;outline:none;transition:border-color 0.2s">
+        <span id="toggle-reg-pass" onclick="toggleRegPassword()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;color:var(--gris);user-select:none">&#x1F441;</span>
+      </div>
+      <div style="position:relative">
+        <input type="password" id="reg-pass2" placeholder="Confirmar contraseña" style="width:100%;padding:10px 40px 10px 14px;border:2px solid var(--gris-claro);border-radius:8px;font-size:13px;outline:none;transition:border-color 0.2s">
+        <span id="toggle-reg-pass2" onclick="toggleRegPassword2()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;color:var(--gris);user-select:none">&#x1F441;</span>
+      </div>
+      <select id="reg-rol" style="width:100%;padding:10px 14px;border:2px solid var(--gris-claro);border-radius:8px;font-size:13px;outline:none;margin-bottom:6px">
+        <option value="Vendedor">Vendedor</option>
+        <option value="Administrador">Administrador</option>
+      </select>
+      <ul style="list-style:none;padding:0;font-size:11px;margin:6px 0">
+        <li id="chk-len" style="color:#999">○ Mínimo 8 caracteres</li>
+        <li id="chk-may" style="color:#999">○ Una mayúscula</li>
+        <li id="chk-min" style="color:#999">○ Una minúscula</li>
+        <li id="chk-num" style="color:#999">○ Un número</li>
+        <li id="chk-sym" style="color:#999">○ Un carácter especial</li>
+        <li id="chk-match" style="color:#999">○ Coinciden las contraseñas</li>
+      </ul>
+      <div id="reg-error" style="color:var(--rojo);font-size:12px;display:none;margin-bottom:6px"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="doRegistro()">CREAR CUENTA</button>
+    </div>
+    
+  </div>
+</div>
+
+<nav id="sidebar" style="display:none">
+  <div class="sidebar-logo">
+    <h1>Vivero</h1>
+    <span>Sistema de Gestión</span>
+  </div>
+  <div class="sidebar-user">
+    <strong id="sb-nombre">—</strong>
+    <small id="sb-rol">—</small>
+  </div>
+  <div class="menu-label" id="lbl-principal">Principal</div>
+  <div class="menu-item active" data-page="dashboard" id="menu-dashboard"><span class="icon">&#x1F3E0;</span> Dashboard</div>
+  <div class="menu-item" data-page="usuarios" id="menu-usuarios"><span class="icon">&#x1F464;</span> Usuarios</div>
+  <div class="menu-item" data-page="plantas" id="menu-plantas"><span class="icon">&#x1F331;</span> Plantas</div>
+  <div class="menu-item" data-page="clientes" id="menu-clientes"><span class="icon">&#x1F91D;</span> Clientes</div>
+  <div class="menu-item" data-page="ventas" id="menu-ventas"><span class="icon">&#x1F4B5;</span> Ventas</div>
+  <div class="menu-item" data-page="inventario" id="menu-inventario"><span class="icon">&#x1F4E6;</span> Inventario</div>
+  <div class="menu-item" data-page="herramientas" id="menu-herramientas"><span class="icon">&#x1F527;</span> Herramientas</div>
+  <div class="menu-label" id="lbl-operaciones">Operaciones</div>
+  <div class="menu-item" data-page="personal" id="menu-personal"><span class="icon">&#x1F465;</span> Personal</div>
+  <div class="menu-item" data-page="biofabrica" id="menu-biofabrica"><span class="icon">&#x1F9EA;</span> Biofábrica</div>
+  <div class="menu-item" data-page="proveedores" id="menu-proveedores"><span class="icon">&#x1F69A;</span> Proveedores</div>
+  <div class="menu-item" data-page="calidad" id="menu-calidad"><span class="icon">&#x2705;</span> Calidad</div>
+  <div class="menu-label" id="lbl-reportes">Reportes</div>
+  <div class="menu-item" data-page="reportes" id="menu-reportes"><span class="icon">&#x1F4CA;</span> Reportes</div>
+  <div class="menu-item" data-page="facturacion" id="menu-facturacion"><span class="icon">&#x1F9FE;</span> Facturación</div>
+  <div class="menu-label" id="lbl-adquisicion">Logística</div>
+  <div class="menu-item" data-page="adquisicion" id="menu-adquisicion"><span class="icon">&#x1F33F;</span> Adquisición de Plantas</div>
+  <div class="sidebar-bottom" style="display:flex;flex-direction:column;gap:6px">
+    <button class="btn-logout" onclick="abrirModalPassword()">&#x1F512; Cambiar Contraseña</button>
+    <button class="btn-logout" onclick="doLogout()">&#x1F6AA; Cerrar Sesión</button>
+  </div>
+</nav>
+
+<main id="main" style="display:none">
+  <!-- DASHBOARD -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Dashboard</div>
+        <div class="page-subtitle">Resumen general del sistema</div>
+      </div>
+      <span id="fecha-hoy" style="font-size:12px;color:var(--gris)"></span>
+    </div>
+    <div class="stats-grid" id="dashboard-stats"></div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Ventas por categoría</span></div>
+        <div class="card-body-pad"><div id="ventas-categoria"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Alertas de inventario</span></div>
+        <div class="card-body-pad"><div id="alertas-lista"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- USUARIOS -->
+  <div class="page" id="page-usuarios">
+    <div class="page-header">
+      <div><div class="page-title">Usuarios</div><div class="page-subtitle">Gestión de cuentas y roles</div></div>
+      <button class="btn btn-primary" onclick="modalUsuario(null)">+ Nuevo Usuario</button>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Usuarios registrados</span>
+        <div class="search-bar">
+          <input type="text" placeholder="Buscar..." onkeyup="filtrarTabla(this,'tabla-usuarios',0)">
+        </div>
+      </div>
+      <div class="card-body">
+        <table id="tabla-usuarios">
+          <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th>Acciones</th></tr></thead>
+          <tbody id="tbody-usuarios"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLANTAS -->
+  <div class="page" id="page-plantas">
+    <div class="page-header">
+      <div><div class="page-title">Plantas</div><div class="page-subtitle">Catálogo y stock</div></div>
+      <button class="btn btn-primary" id="btn-nueva-planta" onclick="modalPlanta(null)">+ Nueva Planta</button>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Catálogo de plantas</span>
+        <div class="search-bar">
+          <input type="text" placeholder="Buscar..." onkeyup="filtrarTabla(this,'tabla-plantas',0)">
+          <select onchange="filtrarTablaSelect(this,'tabla-plantas',2)" id="filtro-categoria-plantas">
+            <option value="">Todas</option>
+            <option>Flor</option><option>Árbol</option><option>Suculenta</option><option>Arbusto</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body">
+        <table id="tabla-plantas">
+          <thead><tr><th>Nombre</th><th>C. Científico</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Stock Mín.</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <tbody id="tbody-plantas"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLIENTES -->
+  <div class="page" id="page-clientes">
+    <div class="page-header">
+      <div><div class="page-title">Clientes</div><div class="page-subtitle">Base de datos de clientes</div></div>
+      <button class="btn btn-primary" id="btn-nuevo-cliente" onclick="modalCliente(null)">+ Nuevo Cliente</button>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Clientes registrados</span>
+        <div class="search-bar">
+          <input type="text" placeholder="Buscar..." onkeyup="filtrarTabla(this,'tabla-clientes',0)">
+        </div>
+      </div>
+      <div class="card-body">
+        <table id="tabla-clientes">
+          <thead><tr><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Tipo</th><th>Compras</th><th>Crédito</th><th>Acciones</th></tr></thead>
+          <tbody id="tbody-clientes"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- VENTAS -->
+  <div class="page" id="page-ventas">
+    <div class="page-header">
+      <div><div class="page-title">Ventas</div><div class="page-subtitle">Registro de transacciones</div></div>
+      <button class="btn btn-primary" onclick="modalVenta(null)">+ Nueva Venta</button>
+    </div>
+    <div class="stats-grid" id="venta-stats" style="grid-template-columns:repeat(3,1fr)"></div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Historial de ventas</span></div>
+      <div class="card-body">
+        <table id="tabla-ventas">
+          <thead><tr><th>Folio</th><th>Cliente</th><th>Total</th><th>Tipo</th><th>Método</th><th>Fecha</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <tbody id="tbody-ventas"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- INVENTARIO -->
+  <div class="page" id="page-inventario">
+    <div class="page-header">
+      <div><div class="page-title">Inventario</div><div class="page-subtitle">Control de stock y alertas</div></div>
+      <button class="btn btn-primary" id="btn-ajustar-stock" onclick="modalMovimientoStock()">+ Ajustar Stock</button>
+    </div>
+    <div id="alertas-inventario"></div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Productos en inventario</span></div>
+      <div class="card-body">
+        <table id="tabla-inventario">
+          <thead><tr><th>Producto</th><th>Categoría</th><th>Stock Actual</th><th>Stock Mínimo</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <tbody id="tbody-inventario"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- HERRAMIENTAS -->
+  <div class="page" id="page-herramientas">
+    <div class="page-header">
+      <div><div class="page-title">Herramientas</div><div class="page-subtitle">Equipos y herramientas</div></div>
+      <button class="btn btn-primary" id="btn-nueva-herramienta" onclick="modalHerramienta(null)">+ Nueva Herramienta</button>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <table>
+          <thead><tr><th>Nombre</th><th>Categoría</th><th>Estado</th><th>Responsable</th><th>Acciones</th></tr></thead>
+          <tbody id="tbody-herramientas"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- PERSONAL -->
+  <div class="page" id="page-personal">
+    <div class="page-header">
+      <div><div class="page-title">Personal</div><div class="page-subtitle">Gestión de empleados</div></div>
+      <button class="btn btn-primary" onclick="modalEmpleado(null)">+ Nuevo Empleado</button>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <table>
+          <thead><tr><th>Nombre</th><th>Puesto</th><th>Área</th><th>Turno</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <tbody id="tbody-personal"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- BIOFABRICA -->
+  <div class="page" id="page-biofabrica">
+    <div class="page-header">
+      <div><div class="page-title">Biofábrica</div><div class="page-subtitle">Lotes de producción</div></div>
+      <button class="btn btn-primary" onclick="modalLote(null)">+ Nuevo Lote</button>
+    </div>
+    <div class="stats-grid" id="bio-stats" style="grid-template-columns:repeat(3,1fr)"></div>
+    <div class="card">
+      <div class="card-body">
+        <table>
+          <thead><tr><th>Lote ID</th><th>Producto</th><th>Inicio</th><th>Vencimiento</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <tbody id="tbody-biofabrica"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROVEEDORES -->
+  <div class="page" id="page-proveedores">
+    <div class="page-header">
+      <div><div class="page-title">Proveedores</div><div class="page-subtitle">Gestión de compras</div></div>
+      <button class="btn btn-primary" onclick="modalProveedor(null)">+ Nuevo Proveedor</button>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <table>
+          <thead><tr><th>Proveedor</th><th>Contacto</th><th>Teléfono</th><th>Email</th><th>Producto principal</th><th>Acciones</th></tr></thead>
+          <tbody id="tbody-proveedores"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- CALIDAD -->
+  <div class="page" id="page-calidad">
+    <div class="page-header">
+      <div><div class="page-title">Control de Calidad</div><div class="page-subtitle">Inspecciones</div></div>
+      <button class="btn btn-primary" onclick="modalInspeccion(null)">+ Nueva Inspección</button>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <table>
+          <thead><tr><th>Lote / Producto</th><th>Inspector</th><th>Fecha</th><th>Estado</th><th>Calificación</th><th>Acciones</th></tr></thead>
+          <tbody id="tbody-calidad"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- REPORTES -->
+  <div class="page" id="page-reportes">
+    <div class="page-header">
+      <div><div class="page-title">Reportes</div><div class="page-subtitle">Estadísticas y análisis</div></div>
+      <div class="search-bar">
+        <button class="btn btn-primary" onclick="generarPDF()">&#x1F4C4; Exportar PDF</button>
+      </div>
+    </div>
+    <div class="stats-grid" id="reportes-stats"></div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Ventas por semana</span></div>
+        <div class="card-body-pad"><div id="ventas-semana"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Top productos</span></div>
+        <div class="card-body-pad"><div id="top-productos"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FACTURACION -->
+  <div class="page" id="page-facturacion">
+    <div class="page-header">
+      <div><div class="page-title">Facturación</div><div class="page-subtitle">CFDI y control fiscal</div></div>
+    </div>
+
+    <div class="card" id="card-facturas-pendientes">
+      <div class="card-header"><span class="card-title">&#x1F4CB; Ventas pendientes de facturar</span></div>
+      <div class="card-body">
+        <table>
+          <thead><tr><th>Folio</th><th>Cliente</th><th>Total</th><th>RFC</th><th>Estado CFDI</th><th>Acción</th></tr></thead>
+          <tbody id="tbody-facturas-pendientes"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">&#x1F4C4; CFDI emitidos</span></div>
+      <div class="card-body">
+        <table>
+          <thead><tr><th>Folio Venta</th><th>Receptor</th><th>RFC</th><th>Total</th><th>UUID</th><th>Estado</th><th>Fecha</th><th>Acción</th></tr></thead>
+          <tbody id="tbody-facturacion"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="page" id="page-adquisicion">
+    <div class="page-header">
+      <div><div class="page-title">Adquisición de Plantas</div><div class="page-subtitle">Registro de compras y recepción de plantas</div></div>
+      <button class="btn btn-primary" id="btn-nueva-adquisicion" onclick="modalAdquisicion(null)">+ Nueva Adquisición</button>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Historial de adquisiciones</span></div>
+      <div class="card-body">
+        <table id="tabla-adquisicion">
+          <thead><tr><th>Folio</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <tbody id="tbody-adquisicion"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- MODALES -->
+<div class="modal-overlay" id="modal-generic" onclick="if(event.target===this)cerrarModal()">
+  <div class="modal">
+    <h3 id="modal-title">Título</h3>
+    <div id="modal-body"></div>
+    <div class="modal-actions" id="modal-actions">
+      <button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary" id="modal-save-btn" onclick="">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-password">
+  <div class="modal" style="width:420px">
+    <h3>Cambiar Contraseña</h3>
+    <div class="form-group"><label>Usuario</label><input type="text" id="pw-user" readonly></div>
+    <div class="form-group"><label>Contraseña actual</label><input type="password" id="pw-actual" placeholder="Ingrese su contraseña actual"></div>
+    <div class="form-group"><label>Nueva contraseña</label><input type="password" id="pw-nueva" placeholder="Nueva contraseña" onkeyup="validarPasswordUI()"></div>
+    <ul class="pw-checklist" id="pw-checklist">
+      <li id="pw-len" class="no">&#x2718; Mínimo 8 caracteres</li>
+      <li id="pw-may" class="no">&#x2718; Una mayúscula</li>
+      <li id="pw-min" class="no">&#x2718; Una minúscula</li>
+      <li id="pw-num" class="no">&#x2718; Un número</li>
+      <li id="pw-sym" class="no">&#x2718; Un carácter especial (!@#$%^&amp;*)</li>
+    </ul>
+    <div class="form-group"><label>Confirmar contraseña</label><input type="password" id="pw-confirm" placeholder="Repita la nueva contraseña" onkeyup="validarPasswordUI()"></div>
+    <div id="pw-error" class="val-error"></div>
+    <div id="pw-ok" class="val-ok"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="cerrarModalPassword()">Cancelar</button>
+      <button class="btn btn-primary" onclick="cambiarPassword()">Actualizar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal" style="width:360px;text-align:center">
+    <div style="font-size:32px;margin-bottom:12px">&#x26A0;&#xFE0F;</div>
+    <h3 id="confirm-msg">¿Eliminar este registro?</h3>
+    <p style="font-size:13px;color:var(--gris);margin:8px 0 20px">Esta acción no se puede deshacer.</p>
+    <div class="modal-actions" style="justify-content:center">
+      <button class="btn btn-outline" onclick="document.getElementById('modal-confirm').classList.remove('open')">Cancelar</button>
+      <button class="btn btn-danger" id="btn-confirm-delete">&#x1F5D1; Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ============ ESTADO GLOBAL ============
+let SESSION = null;
+let API_BASE = '';
+
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (SESSION && SESSION.token) opts.headers['x-auth-token'] = SESSION.token;
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(API_BASE + path, opts);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'Error de servidor');
+  return data;
+}
+
+// ============ LOGIN ============
+async function doLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  if (!u || !p) return mostrarError('Ingrese usuario y contraseña');
+
+  try {
+    const data = await api('POST', '/api/login', { username: u, password: p });
+    SESSION = data;
+    document.getElementById('login-page').style.display = 'none';
+    document.getElementById('sidebar').style.display = 'flex';
+    document.getElementById('main').style.display = 'block';
+    document.getElementById('sb-nombre').textContent = data.nombre;
+    document.getElementById('sb-rol').textContent = data.rol;
+
+    // Roles: Administrador ve todo, Vendedor ve solo lo autorizado
+    if (data.rol === 'Vendedor') {
+      // Eliminar menús y páginas completas que no debe ver
+      const eliminar = ['menu-usuarios','menu-personal','menu-biofabrica','menu-proveedores','menu-calidad','menu-reportes','menu-adquisicion','page-personal','page-biofabrica','page-proveedores','page-calidad','page-reportes','page-adquisicion'];
+      eliminar.forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
+      // Eliminar etiquetas de sección huérfanas
+      ['lbl-operaciones','lbl-reportes','lbl-adquisicion'].forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
+      // Ocultar botones "Nuevo/Ajustar" en módulos de solo consulta (Vendedor puede crear/editar clientes y agendar ventas)
+      ['btn-nueva-planta', 'btn-nueva-herramienta', 'btn-ajustar-stock'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+    }
+
+    document.getElementById('pw-user').value = data.username;
+    setFecha();
+    await cargarDashboard();
+  } catch (e) {
+    document.getElementById('login-error').textContent = e.message;
+    document.getElementById('login-error').style.display = 'block';
+  }
+}
+
+// ============ REGISTRO ============
+function togglePassword() {
+  const p = document.getElementById('login-pass');
+  p.type = p.type === 'password' ? 'text' : 'password';
+}
+
+function toggleRegPassword() {
+  const p = document.getElementById('reg-pass');
+  p.type = p.type === 'password' ? 'text' : 'password';
+}
+
+function toggleRegPassword2() {
+  const p = document.getElementById('reg-pass2');
+  p.type = p.type === 'password' ? 'text' : 'password';
+}
+
+function toggleRegistro() {
+  const f = document.getElementById('registro-form');
+  const link = document.getElementById('link-registro');
+  if (f.style.display === 'none') {
+    document.getElementById('reg-nombre').value = '';
+    document.getElementById('reg-user').value = '';
+    document.getElementById('reg-pass').value = '';
+    document.getElementById('reg-pass2').value = '';
+    document.getElementById('reg-error').style.display = 'none';
+    document.querySelectorAll('#registro-form ul li').forEach(l => l.style.color = '#999');
+    f.style.display = 'block';
+    link.textContent = 'Cancelar';
+  } else {
+    f.style.display = 'none';
+    link.textContent = 'Crear cuenta';
+  }
+}
+
+function validarPassword2() {
+  const p = document.getElementById('reg-pass').value;
+  const p2 = document.getElementById('reg-pass2').value;
+  const checks = [
+    { el: document.getElementById('chk-len'), ok: p.length >= 8 },
+    { el: document.getElementById('chk-may'), ok: /[A-Z]/.test(p) },
+    { el: document.getElementById('chk-min'), ok: /[a-z]/.test(p) },
+    { el: document.getElementById('chk-num'), ok: /[0-9]/.test(p) },
+    { el: document.getElementById('chk-sym'), ok: /[!@#$%^&*(),.?":{}|<>_]/.test(p) },
+    { el: document.getElementById('chk-match'), ok: p.length > 0 && p === p2 }
+  ];
+  checks.forEach(c => { c.el.style.color = c.ok ? '#2d6a4f' : '#d32f2f'; });
+}
+
+async function doRegistro() {
+  const nombre = document.getElementById('reg-nombre').value.trim();
+  const username = document.getElementById('reg-user').value.trim();
+  const password = document.getElementById('reg-pass').value;
+  const password2 = document.getElementById('reg-pass2').value;
+  const rol = document.getElementById('reg-rol').value;
+  if (!nombre || !username || !password) return;
+  if (password !== password2) { document.getElementById('reg-error').textContent = 'Las contraseñas no coinciden'; document.getElementById('reg-error').style.display = 'block'; return; }
+  try {
+    await api('POST', '/api/register-public', { nombre, username, password, rol });
+    document.getElementById('reg-error').style.display = 'none';
+    document.getElementById('registro-form').style.display = 'none';
+    document.getElementById('link-registro').textContent = 'Crear cuenta';
+    document.getElementById('reg-nombre').value = '';
+    document.getElementById('reg-user').value = '';
+    document.getElementById('reg-pass').value = '';
+    document.getElementById('reg-pass2').value = '';
+    document.querySelectorAll('#registro-form ul li').forEach(l => l.style.color = '#999');
+    document.getElementById('login-user').value = username;
+    document.getElementById('login-pass').value = password;
+    doLogin();
+  } catch (e) {
+    document.getElementById('reg-error').textContent = e.message;
+    document.getElementById('reg-error').style.display = 'block';
+  }
+}
+
+document.getElementById('login-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('reg-pass').addEventListener('input', validarPassword2);
+document.getElementById('reg-pass2').addEventListener('input', validarPassword2);
+
+function doLogout() {
+  if (SESSION && SESSION.token) {
+    fetch(API_BASE + '/api/logout', { method: 'POST', headers: { 'x-auth-token': SESSION.token } }).catch(() => {});
+  }
+  SESSION = null;
+  document.getElementById('login-page').style.display = 'flex';
+  document.getElementById('sidebar').style.display = 'none';
+  document.getElementById('main').style.display = 'none';
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pass').value = '';
+  document.getElementById('login-error').style.display = 'none';
+}
+
+// ============ NAVEGACIÓN ============
+document.querySelectorAll('.menu-item').forEach(m => {
+  m.addEventListener('click', function() {
+    document.querySelectorAll('.menu-item').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
+    this.classList.add('active');
+    const page = this.dataset.page;
+    document.getElementById('page-' + page).classList.add('active');
+    cargarPagina(page);
+  });
+});
+
+function cargarPagina(page) {
+  switch (page) {
+    case 'dashboard': cargarDashboard(); break;
+    case 'usuarios': cargarUsuarios(); break;
+    case 'plantas': cargarPlantas(); break;
+    case 'clientes': cargarClientes(); break;
+    case 'ventas': cargarVentas(); break;
+    case 'inventario': cargarInventario(); break;
+    case 'herramientas': cargarHerramientas(); break;
+    case 'personal': cargarPersonal(); break;
+    case 'biofabrica': cargarBiofabrica(); break;
+    case 'proveedores': cargarProveedores(); break;
+    case 'calidad': cargarCalidad(); break;
+    case 'reportes': cargarReportes(); break;
+    case 'facturacion': cargarFacturacion(); break;
+    case 'adquisicion': cargarAdquisiciones(); break;
+  }
+}
+
+// ============ DASHBOARD ============
+async function cargarDashboard() {
+  try {
+    const d = await api('GET', '/api/dashboard');
+    const stats = [
+      { label: 'Plantas en stock', value: d.plantasStock, change: '', cls: '' },
+      { label: 'Ventas del mes', value: '$' + fmt(d.ventasMes), change: d.ventasMesAnt > 0 ? ((d.ventasMes - d.ventasMesAnt) / d.ventasMesAnt * 100).toFixed(0) + '% vs mes ant' : '', cls: 'info' },
+      { label: 'Alertas inventario', value: d.alertas, change: d.alertasCriticas + ' críticas', cls: 'warn' },
+      { label: 'Clientes activos', value: d.clientesActivos, change: '+' + d.clientesNuevosMes + ' este mes', cls: '' },
+      { label: 'Personal activo', value: d.personalActivo, change: d.personalCampo + ' en campo hoy', cls: '' }
+    ];
+
+    document.getElementById('dashboard-stats').innerHTML = stats.map(s =>
+      `<div class="stat-card${s.cls ? ' ' + s.cls : ''}"><div class="label">${s.label}</div><div class="value">${s.value}</div>${s.change ? '<div class="change">' + s.change + '</div>' : ''}</div>`
+    ).join('');
+
+    document.getElementById('ventas-categoria').innerHTML = d.ventasCategoria.length
+      ? d.ventasCategoria.map(v => {
+          const max = Math.max(...d.ventasCategoria.map(x => x.total));
+          const pct = max > 0 ? (v.total / max * 100) : 0;
+          return `<div class="chart-bar-row"><div class="chart-bar-label">${v.categoria}</div><div class="chart-bar-track"><div class="chart-bar-fill" style="width:${pct}%"></div></div><div class="chart-bar-val">$${fmt(v.total)}</div></div>`;
+        }).join('')
+      : '<div class="empty-state"><div class="icon">&#x1F4CA;</div>Sin datos este mes</div>';
+
+    const alertas = await api('GET', '/api/dashboard/alertas');
+    document.getElementById('alertas-lista').innerHTML = alertas.length
+      ? alertas.map(a => {
+          const cls = a.stock <= 0 ? 'alert-red' : a.stock <= a.stock_minimo ? 'alert-yellow' : 'alert-green';
+          const icon = a.stock <= 0 ? '&#x26A0;&#xFE0F;' : a.stock <= a.stock_minimo / 2 ? '&#x26A0;&#xFE0F;' : '&#x23F0;';
+          return `<div class="alert ${cls}">${icon} ${a.nombre} — Stock: ${a.stock} / Mínimo: ${a.stock_minimo}</div>`;
+        }).join('')
+      : '<div class="alert alert-green">&#x2705; Todos los productos con stock suficiente</div>';
+
+    document.getElementById('fecha-hoy').textContent = new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+// ============ USUARIOS ============
+async function cargarUsuarios() {
+  try {
+    const data = await api('GET', '/api/usuarios');
+    document.getElementById('tbody-usuarios').innerHTML = data.map(u =>
+      `<tr>
+        <td>${u.nombre}</td>
+        <td>${u.username}</td>
+        <td><span class="badge badge-blue">${u.rol}</span></td>
+        <td><span class="badge ${u.activo ? 'badge-green' : 'badge-yellow'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
+        <td>${u.ultimo_acceso || 'Nunca'}</td>
+        <td class="actions">
+          <button class="btn btn-edit btn-sm" onclick='modalUsuario(${JSON.stringify(u)})'>&#x270F;&#xFE0F;</button>
+          <button class="btn btn-danger btn-sm" onclick="confirmarEliminar('usuario', ${u.id}, '${u.nombre}')">&#x1F5D1;</button>
+        </td>
+      </tr>`
+    ).join('');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function modalUsuario(user) {
+  const editando = !!user;
+  document.getElementById('modal-title').textContent = editando ? 'Editar Usuario' : 'Nuevo Usuario';
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-row">
+      <div class="form-group"><label>Nombre</label><input type="text" id="f-nombre" value="${editando ? user.nombre : ''}"></div>
+      <div class="form-group"><label>Usuario</label><input type="text" id="f-username" value="${editando ? user.username : ''}" ${editando ? 'readonly' : ''}></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Contraseña${editando ? ' (dejar vacío para mantener)' : ''}</label><input type="password" id="f-password" placeholder="${editando ? '••••••••' : 'Mín. 8 caracteres'}"></div>
+      <div class="form-group"><label>Rol</label><select id="f-rol"><option ${editando && user.rol === 'Administrador' ? 'selected' : ''}>Administrador</option><option ${editando && user.rol === 'Ingeniero' ? 'selected' : ''}>Ingeniero</option><option ${editando && user.rol === 'Vendedor' ? 'selected' : ''}>Vendedor</option></select></div>
+    </div>
+    <div class="form-group"><label><input type="checkbox" id="f-activo" ${editando ? (user.activo ? 'checked' : '') : 'checked'}> Usuario activo</label></div>
+  `;
+
+  document.getElementById('modal-save-btn').onclick = async () => {
+    const data = {
+      nombre: document.getElementById('f-nombre').value,
+      username: editando ? user.username : document.getElementById('f-username').value,
+      rol: document.getElementById('f-rol').value,
+      activo: document.getElementById('f-activo').checked ? 1 : 0
+    };
+    const pw = document.getElementById('f-password').value;
+    if (pw) data.password = pw;
+
+    try {
+      if (editando) {
+        await api('PUT', '/api/usuarios/' + user.id, data);
+      } else {
+        if (!pw) throw new Error('Contraseña requerida');
+        await api('POST', '/api/usuarios', data);
+      }
+      cerrarModal();
+      showToast(editando ? 'Usuario actualizado' : 'Usuario creado');
+      cargarUsuarios();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+
+  abrirModal();
+}
+
+// ============ PLANTAS ============
+async function cargarPlantas() {
+  try {
+    const data = await api('GET', '/api/plantas');
+    document.getElementById('tbody-plantas').innerHTML = data.map(p => {
+      const estado = p.stock <= 0 ? '<span class="badge badge-red">Agotado</span>' :
+        p.stock <= p.stock_minimo ? '<span class="badge badge-yellow">Stock bajo</span>' :
+        '<span class="badge badge-green">Disponible</span>';
+    const puedeEditar = SESSION && (SESSION.rol === 'Administrador' || SESSION.rol === 'Vendedor');
+      return `<tr>
+        <td>${p.nombre}</td>
+        <td>${p.nombre_cientifico || '—'}</td>
+        <td>${p.categoria}</td>
+        <td>$${p.precio}</td>
+        <td>${p.stock}</td>
+        <td>${p.stock_minimo}</td>
+        <td>${estado}</td>
+        <td class="actions">
+          ${puedeEditar ? `<button class="btn btn-edit btn-sm" onclick='modalPlanta(${JSON.stringify(p)})'>&#x270F;&#xFE0F;</button>` : ''}
+          ${puedeEditar ? `<button class="btn btn-danger btn-sm" onclick="confirmarEliminar('planta', ${p.id}, '${p.nombre}')">&#x1F5D1;</button>` : '<span style="color:var(--gris);font-size:11px">Solo lectura</span>'}
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function modalPlanta(planta) {
+  if (SESSION && SESSION.rol !== 'Administrador') return showToast('No tienes permisos para editar', 'error');
+  const editando = !!planta;
+  document.getElementById('modal-title').textContent = editando ? 'Editar Planta' : 'Nueva Planta';
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-row">
+      <div class="form-group"><label>Nombre</label><input type="text" id="f-nombre" value="${editando ? planta.nombre : ''}"></div>
+      <div class="form-group"><label>Nombre científico</label><input type="text" id="f-cientifico" value="${editando ? (planta.nombre_cientifico || '') : ''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Categoría</label><select id="f-categoria">${['Flor','Árbol','Suculenta','Arbusto'].map(c => `<option ${editando && planta.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Precio ($)</label><input type="number" step="0.01" id="f-precio" value="${editando ? planta.precio : ''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Stock</label><input type="number" id="f-stock" value="${editando ? planta.stock : '0'}"></div>
+      <div class="form-group"><label>Stock mínimo</label><input type="number" id="f-stock-min" value="${editando ? planta.stock_minimo : '10'}"></div>
+    </div>
+    <div class="form-group"><label>Descripción</label><textarea rows="2" id="f-desc">${editando ? (planta.descripcion || '') : ''}</textarea></div>
+  `;
+
+  document.getElementById('modal-save-btn').onclick = async () => {
+    const data = {
+      nombre: document.getElementById('f-nombre').value,
+      nombre_cientifico: document.getElementById('f-cientifico').value || null,
+      categoria: document.getElementById('f-categoria').value,
+      precio: parseFloat(document.getElementById('f-precio').value) || 0,
+      stock: parseInt(document.getElementById('f-stock').value) || 0,
+      stock_minimo: parseInt(document.getElementById('f-stock-min').value) || 10,
+      descripcion: document.getElementById('f-desc').value || null
+    };
+    try {
+      if (editando) {
+        await api('PUT', '/api/plantas/' + planta.id, data);
+      } else {
+        await api('POST', '/api/plantas', data);
+      }
+      cerrarModal();
+      showToast(editando ? 'Planta actualizada' : 'Planta registrada');
+      cargarPlantas();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+
+  abrirModal();
+}
+
+// ============ CLIENTES ============
+async function cargarClientes() {
+  try {
+    const data = await api('GET', '/api/clientes');
+    const puedeEditar = SESSION && SESSION.rol === 'Administrador';
+    document.getElementById('tbody-clientes').innerHTML = data.map(c =>
+      `<tr>
+        <td>${c.nombre}</td>
+        <td>${c.telefono || '—'}</td>
+        <td>${c.email || '—'}</td>
+        <td><span class="badge ${c.tipo === 'Empresa' ? 'badge-gray' : 'badge-blue'}">${c.tipo}</span></td>
+        <td>${c.compras_totales}</td>
+        <td><span class="badge ${c.saldo_actual > 0 ? 'badge-yellow' : 'badge-green'}">${c.saldo_actual > 0 ? '$' + c.saldo_actual + ' crédito' : 'Al corriente'}</span></td>
+        <td class="actions">
+          ${puedeEditar ? `<button class="btn btn-edit btn-sm" onclick='modalCliente(${JSON.stringify(c)})'>&#x270F;&#xFE0F;</button>` : ''}
+          ${puedeEditar ? `<button class="btn btn-danger btn-sm" onclick="confirmarEliminar('cliente', ${c.id}, '${c.nombre}')">&#x1F5D1;</button>` : '<span style="color:var(--gris);font-size:11px">Solo lectura</span>'}
+        </td>
+      </tr>`
+    ).join('');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function modalCliente(cliente) {
+  if (SESSION && SESSION.rol === 'Ingeniero') return showToast('No tienes permisos para editar', 'error');
+  const editando = !!cliente;
+  document.getElementById('modal-title').textContent = editando ? 'Editar Cliente' : 'Nuevo Cliente';
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-row">
+      <div class="form-group"><label>Nombre / Razón social</label><input type="text" id="f-nombre" value="${editando ? cliente.nombre : ''}"></div>
+      <div class="form-group"><label>Tipo</label><select id="f-tipo"><option ${editando && cliente.tipo === 'Particular' ? 'selected' : ''}>Particular</option><option ${editando && cliente.tipo === 'Empresa' ? 'selected' : ''}>Empresa</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Teléfono</label><input type="text" id="f-tel" value="${editando ? (cliente.telefono || '') : ''}"></div>
+      <div class="form-group"><label>Email</label><input type="email" id="f-email" value="${editando ? (cliente.email || '') : ''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>RFC</label><input type="text" id="f-rfc" value="${editando ? (cliente.rfc || '') : ''}"></div>
+      <div class="form-group"><label>Límite crédito ($)</label><input type="number" id="f-credito" value="${editando ? (cliente.limite_credito || 0) : '0'}"></div>
+    </div>
+    <div class="form-group"><label>Dirección</label><input type="text" id="f-dir" value="${editando ? (cliente.direccion || '') : ''}"></div>
+  `;
+
+  document.getElementById('modal-save-btn').onclick = async () => {
+    const data = {
+      nombre: document.getElementById('f-nombre').value,
+      tipo: document.getElementById('f-tipo').value,
+      telefono: document.getElementById('f-tel').value || null,
+      email: document.getElementById('f-email').value || null,
+      rfc: document.getElementById('f-rfc').value || null,
+      limite_credito: parseFloat(document.getElementById('f-credito').value) || 0,
+      direccion: document.getElementById('f-dir').value || null
+    };
+    try {
+      if (editando) {
+        await api('PUT', '/api/clientes/' + cliente.id, data);
+      } else {
+        await api('POST', '/api/clientes', data);
+      }
+      cerrarModal();
+      showToast(editando ? 'Cliente actualizado' : 'Cliente registrado');
+      cargarClientes();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+
+  abrirModal();
+}
+
+// ============ VENTAS ============
+async function cargarVentas() {
+  try {
+    const data = await api('GET', '/api/ventas');
+    document.getElementById('tbody-ventas').innerHTML = data.map(v =>
+      `<tr>
+        <td>${v.folio}</td>
+        <td>${v.cliente_nombre || 'Público general'}</td>
+        <td>$${fmt(v.total)}</td>
+        <td>${v.tipo_venta !== 'Normal' ? `<span class="badge badge-yellow">${v.tipo_venta}</span>` : '—'}</td>
+        <td>${v.metodo_pago}</td>
+        <td>${v.fecha_programada || (v.created_at ? v.created_at.split(' ')[0] : '')}</td>
+        <td><span class="badge ${v.estado === 'Pagado' ? 'badge-green' : 'badge-yellow'}">${v.estado}</span></td>
+        <td class="actions"><button class="btn btn-edit btn-sm" onclick="verDetalleVenta(${v.id},'${v.folio}')">&#x1F441;&#xFE0F; Ver</button></td>
+      </tr>`
+    ).join('');
+
+    const stats = await api('GET', '/api/dashboard');
+    document.getElementById('venta-stats').innerHTML = `
+      <div class="stat-card info"><div class="label">Ventas hoy</div><div class="value">$${fmt(stats.ventasHoy)}</div></div>
+      <div class="stat-card"><div class="label">Transacciones mes</div><div class="value">${stats.ventasCount}</div></div>
+      <div class="stat-card"><div class="label">Ticket promedio</div><div class="value">$${fmt(stats.ticketPromedio)}</div></div>
+    `;
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function modalVenta() {
+  document.getElementById('modal-title').textContent = 'Nueva Venta';
+
+  api('GET', '/api/clientes').then(clientes => {
+    api('GET', '/api/plantas').then(plantas => {
+      const plantasConStock = plantas.filter(p => p.stock > 0);
+      document.getElementById('modal-body').innerHTML = `
+        <div class="form-row">
+          <div class="form-group"><label>Cliente</label>
+            <div style="display:flex;gap:4px">
+              <select id="f-cliente" style="flex:1"><option value="">Público general</option>${clientes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('')}</select>
+              <button class="btn btn-outline btn-sm" onclick="modalClienteRapido()" title="Crear cliente nuevo">+</button>
+            </div>
+          </div>
+          <div class="form-group"><label>Método pago</label><select id="f-pago"><option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option><option>Crédito</option></select></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Tipo de venta</label><select id="f-tipo-venta" onchange="toggleTipoVenta()"><option value="Normal">Normal (pago completo)</option><option value="Anticipo">Anticipo / Apartado</option></select></div>
+          <div class="form-group"><label>Fecha programada</label><input type="date" id="f-fecha-programada"></div>
+        </div>
+        <div id="anticipo-fields" style="display:none">
+          <div class="form-row">
+            <div class="form-group"><label>Anticipo \$</label><input type="number" id="f-anticipo" placeholder="0" min="0" value="0" step="0.01"></div>
+          </div>
+        </div>
+        <div class="form-group"><label>Productos</label>
+          <div id="productos-venta">
+            <div class="prod-row" style="display:flex;gap:8px;margin-bottom:8px">
+              <select class="prod-select" style="flex:1;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px"></select>
+              <input type="number" class="prod-cant" placeholder="Cant" style="width:70px;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" value="1" min="1">
+              <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">&#x2716;</button>
+            </div>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="agregarProductoVenta()">+ Agregar producto</button>
+        </div>
+        <div id="venta-total" style="background:var(--crema);border-radius:8px;padding:12px;margin:10px 0;font-size:16px;font-weight:600;text-align:right">Total: $0</div>
+      `;
+
+      document.querySelectorAll('.prod-select').forEach(sel => {
+        sel.innerHTML = plantasConStock.map(p => `<option value="${p.id}" data-precio="${p.precio}" data-nombre="${p.nombre}" data-stock="${p.stock}">${p.nombre} — $${p.precio} (stock: ${p.stock})</option>`).join('');
+      });
+      document.querySelectorAll('.prod-cant').forEach(inp => inp.addEventListener('input', calcTotalVenta));
+      document.getElementById('f-anticipo').addEventListener('input', calcTotalVenta);
+    });
+  });
+
+  document.getElementById('modal-save-btn').onclick = async () => {
+    const rows = document.querySelectorAll('.prod-row');
+    const prods = [];
+    let errorStock = false;
+    rows.forEach(r => {
+      const sel = r.querySelector('.prod-select');
+      const cant = parseInt(r.querySelector('.prod-cant').value) || 1;
+      if (sel && cant > 0) {
+        const stockDisp = parseInt(sel.options[sel.selectedIndex].dataset.stock);
+        if (cant > stockDisp) {
+          errorStock = true;
+          showToast('Stock insuficiente para ${sel.options[sel.selectedIndex].dataset.nombre}: disponible ${stockDisp}, solicitado ${cant}', 'error');
+          return;
+        }
+        prods.push({
+          producto_tipo: 'planta',
+          producto_id: parseInt(sel.value),
+          producto_nombre: sel.options[sel.selectedIndex].dataset.nombre,
+          cantidad: cant,
+          precio_unitario: parseFloat(sel.options[sel.selectedIndex].dataset.precio)
+        });
+      }
+    });
+    if (errorStock) return;
+    if (prods.length === 0) return showToast('Agregue al menos un producto', 'error');
+
+    const tipoVenta = document.getElementById('f-tipo-venta').value;
+    const anticipoVal = tipoVenta !== 'Normal' ? parseFloat(document.getElementById('f-anticipo').value) || 0 : 0;
+
+    try {
+      const res = await api('POST', '/api/ventas', {
+        cliente_id: parseInt(document.getElementById('f-cliente').value) || null,
+        metodo_pago: document.getElementById('f-pago').value,
+        productos: prods,
+        usuario_id: SESSION.id,
+        tipo_venta: tipoVenta,
+        anticipo: anticipoVal,
+        fecha_programada: document.getElementById('f-fecha-programada').value || null
+      });
+      cerrarModal();
+      showToast('Venta registrada — Folio: ' + res.folio);
+      cargarVentas();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+
+  abrirModal();
+}
+
+function toggleTipoVenta() {
+  const tv = document.getElementById('f-tipo-venta').value;
+  document.getElementById('anticipo-fields').style.display = tv === 'Normal' ? 'none' : 'block';
+}
+
+function modalClienteRapido() {
+  document.getElementById('modal-title').textContent = 'Nuevo Cliente Rápido';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-group"><label>Nombre / Razón social</label><input type="text" id="f-nombre" placeholder="Nombre del cliente"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Teléfono</label><input type="text" id="f-telefono" placeholder="Teléfono"></div>
+      <div class="form-group"><label>Email</label><input type="email" id="f-email" placeholder="Email"></div>
+    </div>
+    <div class="form-group"><label>Tipo</label><select id="f-tipo"><option>Particular</option><option>Empresa</option></select></div>
+  `;
+  document.getElementById('modal-save-btn').onclick = async () => {
+    const data = {
+      nombre: document.getElementById('f-nombre').value,
+      telefono: document.getElementById('f-telefono').value,
+      email: document.getElementById('f-email').value,
+      tipo: document.getElementById('f-tipo').value
+    };
+    if (!data.nombre) return showToast('El nombre es requerido', 'error');
+    try {
+      const res = await api('POST', '/api/clientes', data);
+      cerrarModal();
+      showToast('Cliente creado');
+      modalVenta();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+  abrirModal();
+}
+
+function verDetalleVenta(id, folio) {
+  document.getElementById('modal-title').textContent = 'Venta ' + folio;
+  api('GET', '/api/ventas/' + id).then(v => {
+    const tv = v.tipo_venta === 'Normal' ? '' : `<tr><td>Tipo</td><td><strong>${v.tipo_venta}</strong></td></tr>
+      <tr><td>Anticipo</td><td>$${fmt(v.anticipo)}</td></tr>
+      <tr><td>Saldo pendiente</td><td><strong>$${fmt(v.saldo_pendiente)}</strong></td></tr>`;
+    const fp = v.fecha_programada ? `<tr><td>Fecha prog.</td><td>${v.fecha_programada}</td></tr>` : '';
+    document.getElementById('modal-body').innerHTML = `
+      <table style="width:100%;font-size:13px">
+        <tr><td style="color:var(--gris);width:100px">Folio</td><td><strong>${v.folio}</strong></td></tr>
+        <tr><td>Cliente</td><td>${v.cliente_nombre || 'Público general'}</td></tr>
+        <tr><td>Total</td><td><strong>$${fmt(v.total)}</strong></td></tr>
+        <tr><td>Método</td><td>${v.metodo_pago}</td></tr>
+        ${tv}
+        ${fp}
+        <tr><td>Estado</td><td><span class="badge ${v.estado === 'Pagado' ? 'badge-green' : 'badge-yellow'}">${v.estado}</span></td></tr>
+        <tr><td>Usuario</td><td>${v.usuario_nombre || '—'}</td></tr>
+        <tr><td>Fecha</td><td>${v.created_at || '—'}</td></tr>
+      </table>
+      <h4 style="margin:16px 0 8px">Productos</h4>
+      <table style="width:100%;font-size:13px">
+        <thead><tr><th>Producto</th><th>Cant</th><th>Precio</th><th>Subtotal</th></tr></thead>
+        <tbody>${(v.productos || []).map(p => `<tr><td>${p.producto_nombre}</td><td>${p.cantidad}</td><td>$${fmt(p.precio_unitario)}</td><td>$${fmt(p.subtotal)}</td></tr>`).join('')}</tbody>
+      </table>
+      ${v.saldo_pendiente > 0 ? `<div style="margin-top:16px"><button class="btn btn-primary" onclick="registrarAbono(${v.id})">+ Registrar abono</button></div>` : ''}
+    `;
+  });
+  abrirModal();
+}
+
+function registrarAbono(ventaId) {
+  const m = prompt('Monto a abonar:');
+  if (!m) return;
+  api('PUT', '/api/ventas/' + ventaId + '/abono', { monto: parseFloat(m) }).then(r => {
+    showToast('Abono registrado. Saldo pendiente: $' + fmt(r.saldo_pendiente));
+    cerrarModal();
+    cargarVentas();
+  }).catch(e => showToast(e.message, 'error'));
+}
+
+function agregarProductoVenta() {
+  const container = document.getElementById('productos-venta');
+  const row = document.createElement('div');
+  row.className = 'prod-row';
+  row.style.cssText = 'display:flex;gap:8px;margin-bottom:8px';
+  row.innerHTML = `
+    <select class="prod-select" style="flex:1;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px"></select>
+    <input type="number" class="prod-cant" placeholder="Cant" style="width:70px;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" value="1" min="1">
+    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove();calcTotalVenta()">&#x2716;</button>
+  `;
+  container.appendChild(row);
+
+  const sel = row.querySelector('.prod-select');
+  const firstSel = document.querySelector('.prod-select');
+  if (firstSel) sel.innerHTML = firstSel.innerHTML;
+  row.querySelector('.prod-cant').addEventListener('input', calcTotalVenta);
+}
+
+function calcTotalVenta() {
+  let total = 0;
+  document.querySelectorAll('.prod-row').forEach(r => {
+    const sel = r.querySelector('.prod-select');
+    const cant = parseInt(r.querySelector('.prod-cant').value) || 0;
+    if (sel && cant > 0) {
+      total += cant * parseFloat(sel.options[sel.selectedIndex].dataset.precio);
+    }
+  });
+  document.getElementById('venta-total').textContent = 'Total: $' + fmt(total);
+}
+
+// ============ INVENTARIO ============
+async function cargarInventario() {
+  try {
+    const data = await api('GET', '/api/inventario');
+    const puedeAjustar = SESSION && SESSION.rol === 'Administrador';
+    document.getElementById('tbody-inventario').innerHTML = data.map(i => {
+      const estado = i.stock_actual <= 0 ? '<span class="badge badge-red">Agotado</span>' :
+        i.stock_actual <= i.stock_minimo / 2 ? '<span class="badge badge-red">Crítico</span>' :
+        i.stock_actual <= i.stock_minimo ? '<span class="badge badge-yellow">Bajo</span>' :
+        '<span class="badge badge-green">OK</span>';
+      return `<tr>
+        <td>${i.producto_nombre}</td>
+        <td>${i.categoria}</td>
+        <td><strong>${i.stock_actual}</strong></td>
+        <td>${i.stock_minimo}</td>
+        <td>${estado}</td>
+        <td class="actions">${puedeAjustar ? `<button class="btn btn-warn btn-sm" onclick="modalMovimientoStock(${i.producto_id})">&#x1F4E6; Ajustar</button>` : '<span style="color:var(--gris);font-size:11px">Solo consulta</span>'}</td>
+      </tr>`;
+    }).join('');
+
+    const criticos = data.filter(i => i.stock_actual <= i.stock_minimo);
+    document.getElementById('alertas-inventario').innerHTML = criticos.length > 0
+      ? `<div class="alert alert-red">&#x26A0;&#xFE0F; ${criticos.length} producto(s) con stock por debajo del mínimo</div>`
+      : '<div class="alert alert-green">&#x2705; Todos los productos con stock adecuado</div>';
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function modalMovimientoStock(prodId) {
+  document.getElementById('modal-title').textContent = 'Ajuste de Stock';
+
+  api('GET', '/api/plantas').then(plantas => {
+    document.getElementById('modal-body').innerHTML = `
+      <div class="form-group"><label>Producto</label><select id="f-inv-prod">${plantas.map(p => `<option value="${p.id}" ${prodId == p.id ? 'selected' : ''}>${p.nombre} (stock: ${p.stock})</option>`).join('')}</select></div>
+      <div class="form-row">
+        <div class="form-group"><label>Tipo</label><select id="f-inv-tipo"><option>Entrada</option><option>Salida</option><option>Corrección</option></select></div>
+        <div class="form-group"><label>Cantidad</label><input type="number" id="f-inv-cant" placeholder="0" min="1" value="1"></div>
+      </div>
+      <div class="form-group"><label>Motivo</label><textarea rows="2" id="f-inv-motivo" placeholder="Razón del ajuste..."></textarea></div>
+    `;
+  });
+
+  document.getElementById('modal-save-btn').onclick = async () => {
+    try {
+      await api('POST', '/api/inventario/movimiento', {
+        producto_id: parseInt(document.getElementById('f-inv-prod').value),
+        tipo: document.getElementById('f-inv-tipo').value,
+        cantidad: parseInt(document.getElementById('f-inv-cant').value) || 1,
+        motivo: document.getElementById('f-inv-motivo').value || 'Ajuste manual',
+        usuario_id: SESSION.id
+      });
+      cerrarModal();
+      showToast('Stock ajustado');
+      cargarInventario();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+
+  abrirModal();
+}
+
+// ============ HERRAMIENTAS ============
+async function cargarHerramientas() {
+  try {
+    const data = await api('GET', '/api/herramientas');
+    const puedeEditar = SESSION && SESSION.rol === 'Administrador';
+    document.getElementById('tbody-herramientas').innerHTML = data.map(h => {
+      const cls = h.estado === 'Disponible' ? 'badge-green' : h.estado === 'En uso' ? 'badge-blue' : 'badge-yellow';
+      return `<tr>
+        <td>${h.nombre}</td>
+        <td>${h.categoria}</td>
+        <td><span class="badge ${cls}">${h.estado}</span></td>
+        <td>${h.responsable || '—'}</td>
+        <td class="actions">
+          ${puedeEditar ? `<button class="btn btn-edit btn-sm" onclick='modalHerramienta(${JSON.stringify(h)})'>&#x270F;&#xFE0F;</button>` : ''}
+          ${puedeEditar ? `<button class="btn btn-danger btn-sm" onclick="confirmarEliminar('herramienta', ${h.id}, '${h.nombre}')">&#x1F5D1;</button>` : '<span style="color:var(--gris);font-size:11px">Solo lectura</span>'}
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function modalHerramienta(herramienta) {
+  if (SESSION && SESSION.rol !== 'Administrador') return showToast('No tienes permisos para editar', 'error');
+  const editando = !!herramienta;
+  document.getElementById('modal-title').textContent = editando ? 'Editar Herramienta' : 'Nueva Herramienta';
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-row">
+      <div class="form-group"><label>Nombre</label><input type="text" id="f-nombre" value="${editando ? herramienta.nombre : ''}"></div>
+      <div class="form-group"><label>Categoría</label><select id="f-categoria"><option ${editando && herramienta.categoria === 'Corte' ? 'selected' : ''}>Corte</option><option ${editando && herramienta.categoria === 'Riego' ? 'selected' : ''}>Riego</option><option ${editando && herramienta.categoria === 'Labranza' ? 'selected' : ''}>Labranza</option><option ${editando && herramienta.categoria === 'Otro' ? 'selected' : ''}>Otro</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Estado</label><select id="f-estado"><option ${editando && herramienta.estado === 'Disponible' ? 'selected' : ''}>Disponible</option><option ${editando && herramienta.estado === 'En uso' ? 'selected' : ''}>En uso</option><option ${editando && herramienta.estado === 'En mantenimiento' ? 'selected' : ''}>En mantenimiento</option></select></div>
+      <div class="form-group"><label>Responsable</label><input type="text" id="f-resp" value="${editando ? (herramienta.responsable || '') : ''}"></div>
+    </div>
+  `;
+
+  document.getElementById('modal-save-btn').onclick = async () => {
+    const data = {
+      nombre: document.getElementById('f-nombre').value,
+      categoria: document.getElementById('f-categoria').value,
+      estado: document.getElementById('f-estado').value,
+      responsable: document.getElementById('f-resp').value || null
+    };
+    try {
+      if (editando) { await api('PUT', '/api/herramientas/' + herramienta.id, data); }
+      else { await api('POST', '/api/herramientas', data); }
+      cerrarModal(); showToast(editando ? 'Actualizada' : 'Registrada');
+      cargarHerramientas();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+  abrirModal();
+}
+
+// ============ PERSONAL ============
+async function cargarPersonal() {
+  try {
+    const data = await api('GET', '/api/personal');
+    document.getElementById('tbody-personal').innerHTML = data.map(e => {
+      const cls = e.estado === 'Activo' ? 'badge-green' : e.estado === 'Vacaciones' ? 'badge-yellow' : 'badge-gray';
+      return `<tr>
+        <td>${e.nombre}</td>
+        <td>${e.puesto}</td>
+        <td>${e.area}</td>
+        <td>${e.turno}</td>
+        <td><span class="badge ${cls}">${e.estado}</span></td>
+        <td class="actions">
+          <button class="btn btn-edit btn-sm" onclick='modalEmpleado(${JSON.stringify(e)})'>&#x270F;&#xFE0F;</button>
+          <button class="btn btn-danger btn-sm" onclick="confirmarEliminar('personal', ${e.id}, '${e.nombre}')">&#x1F5D1;</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function modalEmpleado(emp) {
+  const editando = !!emp;
+  document.getElementById('modal-title').textContent = editando ? 'Editar Empleado' : 'Nuevo Empleado';
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-row">
+      <div class="form-group"><label>Nombre</label><input type="text" id="f-nombre" value="${editando ? emp.nombre : ''}"></div>
+      <div class="form-group"><label>Puesto</label><input type="text" id="f-puesto" value="${editando ? emp.puesto : ''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Área</label><select id="f-area"><option ${editando && emp.area === 'Campo' ? 'selected' : ''}>Campo</option><option ${editando && emp.area === 'Tienda' ? 'selected' : ''}>Tienda</option><option ${editando && emp.area === 'Biofábrica' ? 'selected' : ''}>Biofábrica</option><option ${editando && emp.area === 'Oficina' ? 'selected' : ''}>Oficina</option></select></div>
+      <div class="form-group"><label>Turno</label><select id="f-turno"><option ${editando && emp.turno === 'Matutino' ? 'selected' : ''}>Matutino</option><option ${editando && emp.turno === 'Vespertino' ? 'selected' : ''}>Vespertino</option></select></div>
+    </div>
+    <div class="form-group"><label>Estado</label><select id="f-estado"><option ${editando && emp.estado === 'Activo' ? 'selected' : ''}>Activo</option><option ${editando && emp.estado === 'Vacaciones' ? 'selected' : ''}>Vacaciones</option><option ${editando && emp.estado === 'Inactivo' ? 'selected' : ''}>Inactivo</option></select></div>
+  `;
+
+  document.getElementById('modal-save-btn').onclick = async () => {
+    const data = {
+      nombre: document.getElementById('f-nombre').value,
+      puesto: document.getElementById('f-puesto').value,
+      area: document.getElementById('f-area').value,
+      turno: document.getElementById('f-turno').value,
+      estado: document.getElementById('f-estado').value
+    };
+    try {
+      if (editando) { await api('PUT', '/api/personal/' + emp.id, data); }
+      else { await api('POST', '/api/personal', data); }
+      cerrarModal(); showToast(editando ? 'Actualizado' : 'Registrado');
+      cargarPersonal();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+  abrirModal();
+}
+
+// ============ BIOFABRICA ============
+async function cargarBiofabrica() {
+  try {
+    const data = await api('GET', '/api/biofabrica');
+    document.getElementById('tbody-biofabrica').innerHTML = data.map(l => {
+      const cls = l.estado === 'Listo' ? 'badge-green' : l.estado === 'Por vencer' ? 'badge-yellow' : 'badge-blue';
+      return `<tr>
+        <td>${l.lote_id}</td>
+        <td>${l.producto}</td>
+        <td>${l.fecha_inicio}</td>
+        <td>${l.fecha_vencimiento}</td>
+        <td><span class="badge ${cls}">${l.estado}</span></td>
+        <td><button class="btn btn-edit btn-sm" onclick="showToast('Detalle de ${l.lote_id}')">&#x1F441;&#xFE0F; Ver</button></td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('bio-stats').innerHTML = `
+      <div class="stat-card"><div class="label">Total lotes</div><div class="value">${data.length}</div></div>
+      <div class="stat-card info"><div class="label">En proceso</div><div class="value">${data.filter(l => l.estado === 'En proceso').length}</div></div>
+      <div class="stat-card warn"><div class="label">Por vencer</div><div class="value">${data.filter(l => l.estado === 'Por vencer').length}</div></div>
+    `;
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function modalLote() {
+  document.getElementById('modal-title').textContent = 'Nuevo Lote';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-row">
+      <div class="form-group"><label>ID Lote</label><input type="text" id="f-lote-id" placeholder="L-2024-XXX"></div>
+      <div class="form-group"><label>Producto</label><input type="text" id="f-producto" placeholder="Ej: Trichoderma"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Fecha inicio</label><input type="date" id="f-inicio"></div>
+      <div class="form-group"><label>Fecha vencimiento</label><input type="date" id="f-venc"></div>
+    </div>
+  `;
+  document.getElementById('modal-save-btn').onclick = async () => {
+    try {
+      await api('POST', '/api/biofabrica', {
+        lote_id: document.getElementById('f-lote-id').value,
+        producto: document.getElementById('f-producto').value,
+        fecha_inicio: document.getElementById('f-inicio').value,
+        fecha_vencimiento: document.getElementById('f-venc').value
+      });
+      cerrarModal(); showToast('Lote registrado');
+      cargarBiofabrica();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+  abrirModal();
+}
+
+// ============ PROVEEDORES ============
+async function cargarProveedores() {
+  try {
+    const data = await api('GET', '/api/proveedores');
+    document.getElementById('tbody-proveedores').innerHTML = data.map(p =>
+      `<tr>
+        <td>${p.nombre}</td>
+        <td>${p.contacto || '—'}</td>
+        <td>${p.telefono || '—'}</td>
+        <td>${p.email || '—'}</td>
+        <td>${p.producto_principal || '—'}</td>
+        <td class="actions">
+          <button class="btn btn-edit btn-sm" onclick='modalProveedor(${JSON.stringify(p)})'>&#x270F;&#xFE0F;</button>
+          <button class="btn btn-danger btn-sm" onclick="confirmarEliminar('proveedor', ${p.id}, '${p.nombre}')">&#x1F5D1;</button>
+        </td>
+      </tr>`
+    ).join('');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function modalProveedor(prov) {
+  const editando = !!prov;
+  document.getElementById('modal-title').textContent = editando ? 'Editar Proveedor' : 'Nuevo Proveedor';
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-row">
+      <div class="form-group"><label>Nombre</label><input type="text" id="f-nombre" value="${editando ? prov.nombre : ''}"></div>
+      <div class="form-group"><label>Contacto</label><input type="text" id="f-contacto" value="${editando ? (prov.contacto || '') : ''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Teléfono</label><input type="text" id="f-tel" value="${editando ? (prov.telefono || '') : ''}"></div>
+      <div class="form-group"><label>Email</label><input type="email" id="f-email" value="${editando ? (prov.email || '') : ''}"></div>
+    </div>
+    <div class="form-group"><label>Producto principal</label><input type="text" id="f-prod" value="${editando ? (prov.producto_principal || '') : ''}"></div>
+  `;
+
+  document.getElementById('modal-save-btn').onclick = async () => {
+    const data = {
+      nombre: document.getElementById('f-nombre').value,
+      contacto: document.getElementById('f-contacto').value || null,
+      telefono: document.getElementById('f-tel').value || null,
+      email: document.getElementById('f-email').value || null,
+      producto_principal: document.getElementById('f-prod').value || null
+    };
+    try {
+      if (editando) { await api('PUT', '/api/proveedores/' + prov.id, data); }
+      else { await api('POST', '/api/proveedores', data); }
+      cerrarModal(); showToast(editando ? 'Actualizado' : 'Registrado');
+      cargarProveedores();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+  abrirModal();
+}
+
+// ============ CALIDAD ============
+async function cargarCalidad() {
+  try {
+    const data = await api('GET', '/api/calidad');
+    document.getElementById('tbody-calidad').innerHTML = data.map(c => {
+      const cls = c.estado_fitosanitario === 'Sano' ? 'badge-green' : c.estado_fitosanitario === 'Plaga leve' ? 'badge-yellow' : 'badge-red';
+      const stars = '&#x2B50;'.repeat(c.calificacion) + '&#x2606;'.repeat(5 - c.calificacion);
+      return `<tr>
+        <td>${c.lote_producto}</td>
+        <td>${c.inspector}</td>
+        <td>${c.fecha}</td>
+        <td><span class="badge ${cls}">${c.estado_fitosanitario}</span></td>
+        <td>${stars}</td>
+        <td><button class="btn btn-edit btn-sm" onclick="showToast('Reporte de ${c.lote_producto}')">&#x1F4CB; Reporte</button></td>
+      </tr>`;
+    }).join('');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function modalInspeccion() {
+  document.getElementById('modal-title').textContent = 'Nueva Inspección';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-row">
+      <div class="form-group"><label>Lote / Producto</label><input type="text" id="f-lote" placeholder="Ej: Rosa Roja — Lote A"></div>
+      <div class="form-group"><label>Inspector</label><input type="text" id="f-inspector" placeholder="Nombre del inspector"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Fecha</label><input type="date" id="f-fecha"></div>
+      <div class="form-group"><label>Estado fitosanitario</label><select id="f-estado"><option>Sano</option><option>Plaga leve</option><option>Plaga grave</option><option>Enfermedad</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Calificación (1-5)</label><input type="number" id="f-calif" min="1" max="5" value="5"></div>
+    </div>
+    <div class="form-group"><label>Observaciones</label><textarea rows="2" id="f-obs"></textarea></div>
+  `;
+
+  document.getElementById('modal-save-btn').onclick = async () => {
+    try {
+      await api('POST', '/api/calidad', {
+        lote_producto: document.getElementById('f-lote').value,
+        inspector: document.getElementById('f-inspector').value,
+        fecha: document.getElementById('f-fecha').value,
+        estado_fitosanitario: document.getElementById('f-estado').value,
+        calificacion: parseInt(document.getElementById('f-calif').value) || 5,
+        observaciones: document.getElementById('f-obs').value || null
+      });
+      cerrarModal(); showToast('Inspección registrada');
+      cargarCalidad();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+  abrirModal();
+}
+
+// ============ REPORTES ============
+async function cargarReportes() {
+  try {
+    const d = await api('GET', '/api/dashboard');
+    document.getElementById('reportes-stats').innerHTML = `
+      <div class="stat-card info"><div class="label">Ingresos del mes</div><div class="value">$${fmt(d.ventasMes)}</div><div class="change">${d.ventasMesAnt > 0 ? ((d.ventasMes - d.ventasMesAnt) / d.ventasMesAnt * 100).toFixed(0) + '% respecto al mes anterior' : ''}</div></div>
+      <div class="stat-card"><div class="label">Unidades vendidas</div><div class="value">${d.topProductos.reduce((a, b) => a + (b.total || 0), 0)}</div><div class="change">Total del mes</div></div>
+      <div class="stat-card"><div class="label">Clientes nuevos</div><div class="value">${d.clientesNuevosMes}</div><div class="change">Total: ${d.clientesActivos} clientes</div></div>
+      <div class="stat-card warn"><div class="label">Gastos operativos</div><div class="value">$${fmt(d.gastosOperativos)}</div><div class="change">Margen: ${d.ventasMes > 0 ? Math.round((1 - d.gastosOperativos / d.ventasMes) * 100) : 0}%</div></div>
+    `;
+
+    document.getElementById('ventas-semana').innerHTML = d.ventasSemana.length
+      ? d.ventasSemana.map(s => {
+          const max = Math.max(...d.ventasSemana.map(x => x.total));
+          const pct = max > 0 ? (s.total / max * 100) : 0;
+          return `<div class="chart-bar-row"><div class="chart-bar-label">Semana ${s.semana}</div><div class="chart-bar-track"><div class="chart-bar-fill" style="width:${pct}%"></div></div><div class="chart-bar-val">$${fmt(s.total)}</div></div>`;
+        }).join('')
+      : '<div class="empty-state">Sin datos este mes</div>';
+
+    document.getElementById('top-productos').innerHTML = d.topProductos.length
+      ? d.topProductos.map(p => {
+          const max = Math.max(...d.topProductos.map(x => x.total));
+          const pct = max > 0 ? (p.total / max * 100) : 0;
+          return `<div class="chart-bar-row"><div class="chart-bar-label">${p.nombre}</div><div class="chart-bar-track"><div class="chart-bar-fill" style="width:${pct}%"></div></div><div class="chart-bar-val">${p.total} uds</div></div>`;
+        }).join('')
+      : '<div class="empty-state">Sin ventas este mes</div>';
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function generarPDF() {
+  window.open(API_BASE + '/api/reportes/pdf', '_blank');
+}
+
+// ============ FACTURACION ============
+async function cargarFacturacion() {
+  try {
+    const [facturas, pendientes] = await Promise.all([
+      api('GET', '/api/facturacion'),
+      api('GET', '/api/ventas/pendientes-factura')
+    ]);
+
+    document.getElementById('tbody-facturacion').innerHTML = facturas.map(f =>
+      `<tr>
+        <td>${f.folio}</td>
+        <td>${f.razon_social || f.cliente_nombre || '—'}</td>
+        <td>${f.rfc || '—'}</td>
+        <td>$${fmt(f.total)}</td>
+        <td style="font-size:11px;font-family:monospace">${f.uuid ? f.uuid.slice(0,23)+'…' : '—'}</td>
+        <td><span class="badge ${f.cfdi_estado === 'Timbrato' ? 'badge-green' : f.cfdi_estado === 'Cancelado' ? 'badge-yellow' : 'badge-red'}">${f.cfdi_estado || 'Pendiente'}</span></td>
+        <td>${f.fecha_timbrado ? new Date(f.fecha_timbrado).toLocaleDateString('es-MX') : (f.created_at ? f.created_at.split(' ')[0] : '')}</td>
+        <td class="actions">
+          ${f.cfdi_estado === 'Timbrato' ? `<a class="btn btn-sm btn-primary" href="/api/facturacion/pdf/${f.venta_id}" target="_blank" style="font-size:11px;text-decoration:none">&#x1F4C4; PDF</a>` : ''}
+          ${f.cfdi_estado === 'Timbrato' && SESSION.rol === 'Administrador' ? `<button class="btn btn-warn btn-sm" onclick="cancelarCFDI(${f.id},'${f.folio}')">&#x274C; Cancelar</button>` : ''}
+          ${f.cfdi_estado === 'Cancelado' && SESSION.rol === 'Administrador' ? `<button class="btn btn-danger btn-sm" onclick="confirmarEliminarFactura(${f.id})">&#x1F5D1;</button>` : ''}
+        </td>
+      </tr>`
+    ).join('');
+
+    const pendientesBody = document.getElementById('tbody-facturas-pendientes');
+    if (pendientes.length === 0) {
+      document.getElementById('card-facturas-pendientes').style.display = 'none';
+    } else {
+      document.getElementById('card-facturas-pendientes').style.display = '';
+      pendientesBody.innerHTML = pendientes.map(v =>
+        `<tr>
+          <td>${v.folio}</td>
+          <td>${v.cliente_nombre || '—'}</td>
+          <td>$${fmt(v.total)}</td>
+          <td>${v.rfc || '—'}</td>
+          <td><span class="badge badge-yellow">${v.cfdi_estado || 'Pendiente'}</span></td>
+          <td class="actions">
+            <button class="btn btn-primary btn-sm" onclick="modalGenerarCFDI(${v.id}, '${v.folio}')">&#x1F4C4; Generar CFDI</button>
+            ${SESSION.rol === 'Administrador' ? `<button class="btn btn-danger btn-sm" onclick="cancelarPendienteFactura(${v.id}, '${v.folio}')">&#x2716;</button>` : ''}
+          </td>
+        </tr>`
+      ).join('');
+    }
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function modalGenerarCFDI(ventaId, folio) {
+  document.getElementById('modal-title').textContent = 'Generar CFDI — ' + folio;
+  document.getElementById('modal-body').innerHTML = `
+    <p style="font-size:12px;color:var(--gris);margin-bottom:12px">Capture los datos fiscales del receptor para timbrar el CFDI.</p>
+    <div class="form-row">
+      <div class="form-group"><label>RFC <span style="color:var(--rojo)">*</span></label>
+        <input type="text" id="f-cfdi-rfc" placeholder="RFC (12 o 13 caracteres)" style="text-transform:uppercase" maxlength="13" oninput="validarRFCCFDI()">
+        <div id="f-cfdi-rfc-msg" style="font-size:10px;margin-top:2px"></div>
+      </div>
+      <div class="form-group"><label>Razón social</label><input type="text" id="f-cfdi-razon" placeholder="Nombre o razón social"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Uso CFDI</label>
+        <select id="f-cfdi-uso">
+          <option value="G01">G01 — Adquisición de mercancías</option>
+          <option value="G03">G03 — Gastos en general</option>
+          <option value="I01">I01 — Instrumentos financieros</option>
+          <option value="D01">D01 — Donativos</option>
+          <option value="S01">S01 — Sin efectos fiscales</option>
+          <option value="CP01">CP01 — Pagos</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Código postal</label><input type="text" id="f-cfdi-cp" placeholder="C.P." maxlength="5" style="width:100px"></div>
+    </div>
+    <div class="form-group"><label>Régimen fiscal del receptor</label>
+      <select id="f-cfdi-regimen">
+        <option>Sin obligaciones fiscales</option>
+        <option>Persona Física con Actividades Empresariales</option>
+        <option>Régimen Simplificado de Confianza</option>
+        <option>Persona Moral</option>
+      </select>
+    </div>
+    <div id="f-cfdi-preview" style="background:var(--crema);padding:10px;border-radius:8px;font-size:12px;margin-top:8px">
+      <strong>Venta:</strong> ${folio}<br>
+      <strong>Timbre:</strong> UUID v4 simulado + sello digital
+    </div>
+  `;
+  document.getElementById('modal-save-btn').textContent = 'Timbrar CFDI';
+  document.getElementById('modal-save-btn').onclick = async () => {
+    const rfc = document.getElementById('f-cfdi-rfc').value.trim().toUpperCase();
+    if (!rfc) return showToast('El RFC es requerido', 'error');
+    if (rfc.length !== 12 && rfc.length !== 13) return showToast('El RFC debe tener 12 caracteres (moral) o 13 (física)', 'error');
+    try {
+      const res = await api('POST', '/api/facturacion/timbrar', {
+        venta_id: ventaId,
+        rfc,
+        razon_social: document.getElementById('f-cfdi-razon').value,
+        uso_cfdi: document.getElementById('f-cfdi-uso').value,
+        regimen_fiscal_receptor: document.getElementById('f-cfdi-regimen').value,
+        codigo_postal: document.getElementById('f-cfdi-cp').value
+      });
+      cerrarModal();
+      showToast('CFDI timbrado — UUID: ' + res.uuid.slice(0,8) + '…', 'success');
+      const pdfUrl = '/api/facturacion/pdf/' + ventaId;
+      const a = document.createElement('a');
+      a.href = pdfUrl;
+      a.download = 'cfdi_' + folio + '.pdf';
+      a.click();
+      cargarFacturacion();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+  abrirModal();
+}
+
+function validarRFCCFDI() {
+  const rfc = document.getElementById('f-cfdi-rfc').value.trim().toUpperCase();
+  const msg = document.getElementById('f-cfdi-rfc-msg');
+  if (rfc.length === 0) { msg.textContent = ''; return; }
+  if (rfc.length < 12) { msg.textContent = 'Mínimo 12 caracteres'; msg.style.color = '#c0392b'; return; }
+  if (rfc.length === 12) { msg.textContent = 'RFC persona moral ✓'; msg.style.color = '#2d6a4f'; return; }
+  if (rfc.length === 13) { msg.textContent = 'RFC persona física ✓'; msg.style.color = '#2d6a4f'; return; }
+}
+
+async function cancelarCFDI(id, folio) {
+  if (!confirm('¿Cancelar el CFDI de ' + folio + '? Se limpiará el UUID y quedará como Cancelado.')) return;
+  try {
+    await api('PUT', '/api/facturacion/' + id + '/cancelar');
+    showToast('CFDI cancelado');
+    cargarFacturacion();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function confirmarEliminarFactura(id) {
+  if (!confirm('¿Eliminar permanentemente esta factura cancelada?')) return;
+  try {
+    await api('DELETE', '/api/facturacion/' + id);
+    showToast('Factura eliminada');
+    cargarFacturacion();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function cancelarPendienteFactura(ventaId, folio) {
+  if (!confirm('¿Cancelar la factura pendiente de ' + folio + '? La venta seguirá existiendo.')) return;
+  try {
+    await api('POST', '/api/facturacion/cancelar-pendiente', { venta_id: ventaId });
+    showToast('Factura pendiente cancelada');
+    cargarFacturacion();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+// ============ ADQUISICION DE PLANTAS ============
+async function cargarAdquisiciones() {
+  try {
+    const data = await api('GET', '/api/adquisiciones');
+    document.getElementById('tbody-adquisicion').innerHTML = data.map(a =>
+      `<tr>
+        <td><strong>${a.folio}</strong></td>
+        <td>${a.proveedor}</td>
+        <td>${a.fecha_adquisicion}</td>
+        <td>$${fmt(a.total)}</td>
+        <td><span class="badge ${a.estado === 'Recibido' ? 'badge-green' : 'badge-yellow'}">${a.estado}</span></td>
+        <td class="actions"><button class="btn btn-edit btn-sm" onclick="verDetalleAdquisicion(${a.id})">&#x1F441;&#xFE0F; Ver</button></td>
+      </tr>`
+    ).join('');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function modalAdquisicion() {
+  document.getElementById('modal-title').textContent = 'Nueva Adquisición de Plantas';
+
+  api('GET', '/api/plantas').then(plantas => {
+    document.getElementById('modal-body').innerHTML = `
+      <div class="form-row">
+        <div class="form-group"><label>Proveedor</label><input type="text" id="f-prov" placeholder="Nombre del proveedor"></div>
+        <div class="form-group"><label>Fecha</label><input type="date" id="f-fecha" value="${new Date().toISOString().split('T')[0]}"></div>
+      </div>
+      <div class="form-group"><label>Observaciones</label><textarea rows="2" id="f-obs" placeholder="Notas..."></textarea></div>
+      <div class="form-group"><label>Productos</label>
+        <div id="productos-adq">
+          <div class="prod-row" style="display:flex;gap:8px;margin-bottom:8px">
+            <select class="adq-select" style="flex:1;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px"></select>
+            <input type="number" class="adq-cant" placeholder="Cant" style="width:70px;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" value="1" min="1">
+            <input type="number" class="adq-precio" placeholder="Precio" style="width:90px;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" value="0" min="0" step="0.01">
+            <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">&#x2716;</button>
+          </div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="agregarProductoAdq()">+ Agregar producto</button>
+      </div>
+    `;
+
+    document.querySelectorAll('.adq-select').forEach(sel => {
+      sel.innerHTML = plantas.map(p => `<option value="${p.id}">${p.nombre} (stock: ${p.stock})</option>`).join('');
+    });
+  });
+
+  document.getElementById('modal-save-btn').onclick = async () => {
+    const rows = document.querySelectorAll('#productos-adq .prod-row');
+    const prods = [];
+    rows.forEach(r => {
+      const sel = r.querySelector('.adq-select');
+      const cant = parseInt(r.querySelector('.adq-cant').value) || 1;
+      const precio = parseFloat(r.querySelector('.adq-precio').value) || 0;
+      if (sel && cant > 0) {
+        prods.push({ planta_id: parseInt(sel.value), cantidad: cant, precio_unitario: precio });
+      }
+    });
+    if (prods.length === 0) return showToast('Agregue al menos un producto', 'error');
+
+    try {
+      const res = await api('POST', '/api/adquisiciones', {
+        proveedor: document.getElementById('f-prov').value,
+        fecha_adquisicion: document.getElementById('f-fecha').value,
+        productos: prods,
+        observaciones: document.getElementById('f-obs').value,
+        usuario_id: SESSION.id
+      });
+      cerrarModal();
+      showToast('Adquisición registrada — ' + res.folio);
+      cargarAdquisiciones();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+
+  abrirModal();
+}
+
+function agregarProductoAdq() {
+  const container = document.getElementById('productos-adq');
+  const row = document.createElement('div');
+  row.className = 'prod-row';
+  row.style.cssText = 'display:flex;gap:8px;margin-bottom:8px';
+  row.innerHTML = `
+    <select class="adq-select" style="flex:1;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px"></select>
+    <input type="number" class="adq-cant" placeholder="Cant" style="width:70px;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" value="1" min="1">
+    <input type="number" class="adq-precio" placeholder="Precio" style="width:90px;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" value="0" min="0" step="0.01">
+    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">&#x2716;</button>
+  `;
+  container.appendChild(row);
+  const sel = row.querySelector('.adq-select');
+  const firstSel = document.querySelector('.adq-select');
+  if (firstSel) sel.innerHTML = firstSel.innerHTML;
+}
+
+function verDetalleAdquisicion(id) {
+  document.getElementById('modal-title').textContent = 'Detalle de Adquisición';
+  api('GET', '/api/adquisiciones/' + id).then(a => {
+    document.getElementById('modal-body').innerHTML = `
+      <table style="width:100%;font-size:13px">
+        <tr><td style="color:var(--gris);width:110px">Folio</td><td><strong>${a.folio}</strong></td></tr>
+        <tr><td>Proveedor</td><td>${a.proveedor}</td></tr>
+        <tr><td>Fecha</td><td>${a.fecha_adquisicion}</td></tr>
+        <tr><td>Total</td><td><strong>$${fmt(a.total)}</strong></td></tr>
+        <tr><td>Estado</td><td><span class="badge badge-green">${a.estado}</span></td></tr>
+        <tr><td>Observaciones</td><td>${a.observaciones || '—'}</td></tr>
+      </table>
+      <h4 style="margin:16px 0 8px">Productos adquiridos</h4>
+      <table style="width:100%;font-size:13px">
+        <thead><tr><th>Planta</th><th>Variedad</th><th>Cant</th><th>Precio</th><th>Subtotal</th></tr></thead>
+        <tbody>${(a.productos || []).map(p => `<tr><td>${p.planta_nombre || '—'}</td><td>${p.variedad || '—'}</td><td>${p.cantidad}</td><td>$${fmt(p.precio_unitario)}</td><td>$${fmt(p.subtotal)}</td></tr>`).join('')}</tbody>
+      </table>
+    `;
+    document.getElementById('modal-actions').style.display = 'none';
+  });
+  abrirModal();
+}
+
+// ============ PASSWORD ============
+function abrirModalPassword() {
+  document.getElementById('modal-password').classList.add('open');
+  document.getElementById('pw-actual').value = '';
+  document.getElementById('pw-nueva').value = '';
+  document.getElementById('pw-confirm').value = '';
+  document.getElementById('pw-error').style.display = 'none';
+  document.getElementById('pw-ok').style.display = 'none';
+  document.querySelectorAll('#pw-checklist li').forEach(l => { l.className = 'no'; });
+}
+
+function cerrarModalPassword() {
+  document.getElementById('modal-password').classList.remove('open');
+}
+
+function validarPasswordUI() {
+  const pw = document.getElementById('pw-nueva').value;
+  const confirm = document.getElementById('pw-confirm').value;
+  const checks = [
+    { id: 'pw-len', test: pw.length >= 8 },
+    { id: 'pw-may', test: /[A-Z]/.test(pw) },
+    { id: 'pw-min', test: /[a-z]/.test(pw) },
+    { id: 'pw-num', test: /[0-9]/.test(pw) },
+    { id: 'pw-sym', test: /[!@#$%^&*(),.?":{}|<>_]/.test(pw) }
+  ];
+
+  checks.forEach(c => {
+    document.getElementById(c.id).className = c.test ? 'ok' : 'no';
+    document.getElementById(c.id).innerHTML = (c.test ? '\u2714' : '\u2718') + ' ' + document.getElementById(c.id).innerHTML.slice(2);
+  });
+
+  const allOk = checks.every(c => c.test);
+  const match = pw === confirm;
+
+  if (pw && confirm && match && allOk) {
+    document.getElementById('pw-ok').textContent = 'Contraseña válida';
+    document.getElementById('pw-ok').style.display = 'block';
+    document.getElementById('pw-error').style.display = 'none';
+  } else if (pw && confirm && !match) {
+    document.getElementById('pw-error').textContent = 'Las contraseñas no coinciden';
+    document.getElementById('pw-error').style.display = 'block';
+    document.getElementById('pw-ok').style.display = 'none';
+  } else {
+    document.getElementById('pw-error').style.display = 'none';
+    document.getElementById('pw-ok').style.display = 'none';
+  }
+}
+
+async function cambiarPassword() {
+  const actual = document.getElementById('pw-actual').value;
+  const nueva = document.getElementById('pw-nueva').value;
+  const confirm = document.getElementById('pw-confirm').value;
+
+  if (!actual || !nueva || !confirm) {
+    return showToast('Complete todos los campos', 'error');
+  }
+
+  const checks = [
+    nueva.length >= 8,
+    /[A-Z]/.test(nueva),
+    /[a-z]/.test(nueva),
+    /[0-9]/.test(nueva),
+    /[!@#$%^&*(),.?":{}|<>_]/.test(nueva)
+  ];
+
+  if (!checks.every(c => c)) {
+    return showToast('La contraseña no cumple los requisitos de seguridad', 'error');
+  }
+
+  if (nueva !== confirm) {
+    return showToast('Las contraseñas no coinciden', 'error');
+  }
+
+  try {
+    await api('PUT', '/api/cambiar-password', {
+      username: SESSION.username,
+      password_actual: actual,
+      password_nueva: nueva
+    });
+    cerrarModalPassword();
+    showToast('Contraseña actualizada correctamente');
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+// ============ MODALES ============
+function abrirModal() { document.getElementById('modal-generic').classList.add('open'); document.getElementById('modal-actions').style.display = ''; }
+function cerrarModal() { document.getElementById('modal-generic').classList.remove('open'); document.getElementById('modal-save-btn').textContent = 'Guardar'; }
+
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
+});
+
+// ============ CONFIRMAR ELIMINAR ============
+let eliminarCallback = null;
+
+function confirmarEliminar(tipo, id, nombre) {
+  document.getElementById('confirm-msg').textContent = '¿Eliminar ' + nombre + '?';
+  document.getElementById('modal-confirm').classList.add('open');
+
+  document.getElementById('btn-confirm-delete').onclick = async () => {
+    document.getElementById('modal-confirm').classList.remove('open');
+    try {
+      await api('DELETE', '/api/' + tipo + 's/' + id);
+      showToast(nombre + ' eliminado');
+      cargarPagina(document.querySelector('.menu-item.active').dataset.page);
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+}
+
+// ============ FILTROS ============
+function filtrarTabla(input, tablaId, col) {
+  const val = input.value.toLowerCase();
+  document.querySelectorAll('#' + tablaId + ' tbody tr').forEach(row => {
+    row.style.display = row.cells[col].textContent.toLowerCase().includes(val) ? '' : 'none';
+  });
+}
+
+function filtrarTablaSelect(sel, tablaId, col) {
+  const val = sel.value.toLowerCase();
+  document.querySelectorAll('#' + tablaId + ' tbody tr').forEach(row => {
+    row.style.display = (!val || row.cells[col].textContent.toLowerCase().includes(val)) ? '' : 'none';
+  });
+}
+
+// ============ UTILIDADES ============
+function setFecha() {
+  document.getElementById('fecha-hoy').textContent = new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function fmt(n) {
+  return Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = type === 'error' ? 'error' : '';
+  t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>

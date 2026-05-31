@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Acta de Entrega - SIGV</title>
+<style>
+  @page { margin: 2cm; size: A4; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #222; line-height: 1.5; font-size: 11pt; padding: 40px; }
+  h1 { color: #1b4332; font-size: 20pt; text-align: center; margin-bottom: 4px; }
+  .sub { color: #2d6a4f; font-size: 14pt; text-align: center; font-weight: bold; margin-bottom: 2px; }
+  .meta { text-align: center; font-size: 10pt; color: #555; margin-bottom: 20px; }
+  hr { border: none; border-top: 1px solid #ccc; margin: 16px 0; }
+  h2 { color: #1b4332; font-size: 13pt; margin-top: 18px; margin-bottom: 6px; border-bottom: 1px solid #2d6a4f; padding-bottom: 3px; }
+  h3 { color: #1b4332; font-size: 11pt; margin-top: 12px; margin-bottom: 4px; }
+  p { text-align: justify; margin-bottom: 6px; }
+  ul { margin: 4px 0 8px 20px; }
+  li { margin-bottom: 3px; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 9pt; }
+  th, td { border: 1px solid #bbb; padding: 6px 8px; text-align: left; }
+  th { background: #d8f3dc; font-weight: 600; }
+  .firma { margin-top: 30px; }
+  .firma p { margin-bottom: 20px; }
+  @media print { body { padding: 0; } }
+</style>
+</head>
+<body>
+
+<h1>ACTA DE ENTREGA Y LIBERACIÓN</h1>
+<p class="sub">Sistema Integral de Gestión de Vivero (SIGV)</p>
+<p class="sub" style="font-size:12pt">Versión 1.0.0</p>
+<p class="meta">Fecha de liberación: 29 de Mayo de 2026</p>
+<p class="meta">Lugar: Instituto Tecnológico Superior de Perote, Perote, Veracruz</p>
+<p class="meta">Desarrollado por: <strong>[Nombre del desarrollador]</strong></p>
+<p class="meta">Entregado a: <strong>[Nombre del receptor]</strong></p>
+
+<hr>
+
+<h2>1. Declaración del Objeto</h2>
+<p>Por medio del presente documento formal, se hace constar que el desarrollador del software antes mencionado realiza la entrega física, lógica y operativa de la plataforma web denominada <strong>Sistema Integral de Gestión de Vivero (SIGV)</strong> en su versión estable 1.0.0. Dicho software ha sido desarrollado cubriendo estándares de diseño, arquitectura cliente-servidor y seguridad requeridos para la gestión integral de operaciones de un vivero.</p>
+<p>El receptor del sistema manifiesta de conformidad haber recibido el código fuente, la base de datos estructurada, el acceso al superusuario administrador y la documentación correspondiente para su puesta en marcha.</p>
+
+<hr>
+
+<h2>2. Alcance del Sistema Entregado</h2>
+
+<h3>A. Módulo de Autenticación y Control de Acceso (ACL)</h3>
+<ul>
+  <li><strong>Control de Sesiones con Token:</strong> Inicio de sesión mediante token criptográfico SHA-256. Cada petición a la API requiere el token en el encabezado <code>x-auth-token</code>.</li>
+  <li><strong>Cifrado de Contraseñas:</strong> Algoritmo Bcrypt con saltos automáticos. Ninguna contraseña se almacena en texto plano.</li>
+  <li><strong>Filtro de Seguridad por Roles (Middleware):</strong> Validación estricta a nivel de servidor (<code>requireRole()</code>). Si un vendedor intenta crear/editar recibe HTTP 403.</li>
+  <li><strong>Prevención de Inyecciones SQL:</strong> Consultas parametrizadas en todas las operaciones de base de datos.</li>
+  <li><strong>Validación de Contraseñas:</strong> Reglas estrictas (8+ caracteres, mayúscula, minúscula, número, símbolo).</li>
+</ul>
+
+<h3>B. Módulo de Dashboard</h3>
+<p>Resumen ejecutivo con tarjetas de métricas en tiempo real: Plantas en stock, Ventas del mes, Alertas de inventario, Clientes activos, Personal activo, Ventas de hoy, Gastos operativos estimados, Ticket promedio. Gráfico de barras de ventas por categoría, alertas de inventario codificadas por colores y ranking de top 5 productos más vendidos del mes.</p>
+
+<h3>C. Módulo de Usuarios</h3>
+<p>Gestión completa de cuentas: crear, editar, activar/desactivar y eliminar usuarios. Roles definidos: Administrador (acceso total) y Vendedor (acceso restringido a lectura, solo puede crear ventas). Cambio de contraseña con validación en tiempo real mediante checklist.</p>
+
+<h3>D. Módulo de Plantas</h3>
+<p>Catálogo completo con nombre, categoría, precio, stock, descripción y estado. Administrador: CRUD completo. Vendedor: visualización de solo lectura con etiqueta "Solo consulta".</p>
+
+<h3>E. Módulo de Clientes</h3>
+<p>Base de datos con nombre, teléfono, correo, dirección, RFC y CURP con validación de unicidad. Administrador: CRUD completo. Vendedor: solo lectura.</p>
+
+<h3>F. Módulo de Ventas</h3>
+<p>Registro de ventas con selección de cliente, método de pago (Efectivo, Tarjeta, Transferencia) y productos múltiples. Selector inteligente con stock disponible en tiempo real. Validación de stock en doble capa: frontend (UX inmediata) y backend (transacción ACID con rollback automático si algún producto no tiene suficiente existencia). Folio único automatizado (F- + número secuencial). Vendedor puede crear ventas pero no editar ni eliminar existentes.</p>
+
+<h3>G. Módulo de Inventario</h3>
+<p>Control de existencias con vista consolidada de plantas y herramientas. Tabla que muestra tipo, producto, cantidad actual, mínimo requerido y estado codificado por colores (Verde: suficiente, Amarillo: bajo, Rojo: agotado). Ajuste de stock solo para administrador con registro automático en historial de movimientos.</p>
+
+<h3>H. Módulo de Herramientas</h3>
+<p>Catálogo con nombre, tipo, cantidad, estado y ubicación. Administrador: CRUD completo. Vendedor: solo lectura.</p>
+
+<h3>I. Módulo de Facturación</h3>
+<p>Ventas por facturar con botón para generar CFDI. Procesamiento automático con folio fiscal (CFDI- + folio de venta) y captura de RFC del cliente. Historial completo de facturas emitidas con estado y fecha.</p>
+
+<h3>J. Módulo de Personal</h3>
+<p>Gestión de empleados del vivero con área (Campo, Invernadero, Tienda, Biofábrica, Oficina), puesto, teléfono y estado (Activo/Inactivo). Solo administrador.</p>
+
+<h3>K. Módulo de Biofábrica</h3>
+<p>Seguimiento de propagación con tipo de explante, medio de cultivo, fechas de siembra y trasplante, y estado. Solo administrador.</p>
+
+<h3>L. Módulo de Proveedores</h3>
+<p>Directorio con nombre, contacto, teléfono, correo y tipo de insumo. CRUD solo administrador.</p>
+
+<h3>M. Módulo de Calidad</h3>
+<p>Inspecciones con lote, inspector, fecha, estado fitosanitario, calificación y observaciones. Solo administrador.</p>
+
+<h3>N. Módulo de Reportes PDF</h3>
+<p>Generación de documento PDF profesional con resumen general, ventas por semana con tabla, productos más vendidos, clientes nuevos registrados y gastos operativos estimados.</p>
+
+<hr>
+
+<h2>3. Arquitectura del Sistema</h2>
+<table>
+  <tr><th>Elemento</th><th>Tecnología</th></tr>
+  <tr><td>Backend</td><td>Node.js + Express.js</td></tr>
+  <tr><td>Base de Datos</td><td>SQLite (sql.js) — embebida, no requiere instalación externa</td></tr>
+  <tr><td>Frontend</td><td>HTML5 + CSS3 + JavaScript vanilla (SPA)</td></tr>
+  <tr><td>Cifrado</td><td>bcryptjs</td></tr>
+  <tr><td>Reportes</td><td>PDFKit</td></tr>
+  <tr><td>Puerto</td><td>3000 (configurable via variable de entorno PORT)</td></tr>
+  <tr><td>Red Local</td><td>Escucha en 0.0.0.0 con detección automática de IP</td></tr>
+</table>
+
+<hr>
+
+<h2>4. Plan de Liberación</h2>
+
+<h3>4.1 Requisitos para Ejecución Local</h3>
+<ul>
+  <li>Instalar Node.js (versión 16 o superior) desde nodejs.org</li>
+  <li>Descomprimir el proyecto y abrir terminal en la carpeta</li>
+  <li>Ejecutar: <code>npm install</code> y luego <code>npm start</code></li>
+  <li>Abrir navegador en <code>http://localhost:3000</code></li>
+</ul>
+
+<h3>4.2 Usuarios por Defecto</h3>
+<table>
+  <tr><th>Usuario</th><th>Contraseña</th><th>Rol</th></tr>
+  <tr><td>admin</td><td>Admin123!</td><td>Administrador</td></tr>
+  <tr><td>vendedor</td><td>Vendedor123!</td><td>Vendedor</td></tr>
+</table>
+
+<h3>4.3 Compartición en Red Local</h3>
+<p>Ejecutar <code>npm start</code>, verificar la IP local mostrada en la consola y abrir <code>http://[IP]:3000</code> desde otras PCs en la misma red. El firewall de Windows debe permitir conexiones en el puerto 3000.</p>
+
+<hr>
+
+<h2>5. Matriz de Pruebas Post-Liberación</h2>
+<table>
+  <tr><th>Módulo</th><th>Entrada</th><th>Comportamiento Esperado</th><th>Tipo</th></tr>
+  <tr><td>Login</td><td>admin / Admin123!</td><td>Acceso al dashboard con menú completo</td><td>Visual</td></tr>
+  <tr><td>Login</td><td>vendedor / Vendedor123!</td><td>Acceso con menú restringido</td><td>Visual</td></tr>
+  <tr><td>Login</td><td>admin / clave_errónea</td><td>Mensaje: "Usuario o contraseña incorrectos"</td><td>Seguridad</td></tr>
+  <tr><td>API</td><td>Petición sin token</td><td>HTTP 401 No autorizado</td><td>Backend</td></tr>
+  <tr><td>API</td><td>Vendedor POST /api/plantas</td><td>HTTP 403 Acceso denegado</td><td>Backend</td></tr>
+  <tr><td>Ventas</td><td>Venta con stock suficiente</td><td>Venta registrada, stock descontado</td><td>Transaccional</td></tr>
+  <tr><td>Ventas</td><td>Venta con stock insuficiente</td><td>Rechazo, stock intacto, mensaje de error</td><td>Consistencia ACID</td></tr>
+  <tr><td>Facturación</td><td>Procesar CFDI</td><td>Factura emitida con folio fiscal</td><td>Integración</td></tr>
+  <tr><td>Reportes</td><td>Generar PDF</td><td>Descarga de documento con datos actualizados</td><td>Funcional</td></tr>
+</table>
+
+<hr>
+
+<h2>6. Archivos Entregados</h2>
+<ul>
+  <li><strong>Código fuente completo:</strong> server.js, database.js, package.json, public/index.html</li>
+  <li><strong>Base de datos:</strong> Se genera automáticamente al primer inicio (vivero.db)</li>
+  <li><strong>Documento de liberación:</strong> El presente documento</li>
+</ul>
+
+<hr>
+
+<h2>7. Condiciones de Garantía y Licenciamiento</h2>
+<ul>
+  <li><strong>Propiedad Intelectual:</strong> El código fuente y el diseño gráfico pertenecen al desarrollador. Se otorga una licencia de uso permanente e intransferible para la operación del sistema.</li>
+  <li><strong>Periodo de Garantía:</strong> 6 meses a partir de la firma de este documento, cubriendo corrección de errores latentes en el código (bugs) e inconsistencias en la base de datos.</li>
+  <li><strong>Exclusiones:</strong> Fallos del entorno de ejecución (Node.js, SO), pérdida de contraseñas, modificaciones no autorizadas del código por terceros, fallos de infraestructura de red.</li>
+</ul>
+
+<hr>
+
+<h2>8. Bitácora de Cambios (Changelog v1.0.0)</h2>
+<table>
+  <tr><th>Módulo</th><th>Tipo</th><th>Descripción</th></tr>
+  <tr><td>Infraestructura</td><td>Mejora</td><td>Migración de better-sqlite3 a sql.js para eliminar dependencia de herramientas de compilación nativas</td></tr>
+  <tr><td>Autenticación</td><td>Feature</td><td>Sistema de autenticación por token criptográfico con middleware Express</td></tr>
+  <tr><td>Autorización</td><td>Feature</td><td>Middleware requireRole() para proteger endpoints de escritura por rol</td></tr>
+  <tr><td>Seguridad</td><td>Feature</td><td>Validación estricta de contraseñas (8+ chars, mayúscula, minúscula, número, símbolo)</td></tr>
+  <tr><td>Ventas</td><td>Feature</td><td>Validación de stock dual (frontend + backend con transacción ACID)</td></tr>
+  <tr><td>Vendedor</td><td>Feature</td><td>Restricción de menú lateral por rol (eliminación de nodos DOM)</td></tr>
+  <tr><td>Vendedor</td><td>Feature</td><td>Botones de solo lectura en módulos restringidos</td></tr>
+  <tr><td>Facturación</td><td>Feature</td><td>Módulo de procesamiento de CFDI con selector de ventas pendientes</td></tr>
+  <tr><td>Menú</td><td>Fix</td><td>Eliminación completa de módulos Agenda y Bitácora</td></tr>
+  <tr><td>Infraestructura</td><td>Mejora</td><td>Soporte para red local (0.0.0.0, detección automática de IP)</td></tr>
+  <tr><td>Reportes</td><td>Feature</td><td>Generación de PDF con resumen ejecutivo, ventas por semana, top productos</td></tr>
+</table>
+
+<hr>
+
+<h2>9. Firmas</h2>
+<div class="firma">
+  <p><strong>Responsable Técnico</strong><br>_____________________________<br>Ing. Jose Manuel Diaz Rivera</p>
+  <p><strong>Responsable del Área Receptora</strong><br>_____________________________<br>[Nombre del receptor]</p>
+  <p><strong>Desarrollador</strong><br>_____________________________<br>[Nombre del desarrollador]</p>
+</div>
+
+<p style="text-align:center;color:#888;font-size:9pt;margin-top:40px">Documento generado el 29 de Mayo de 2026</p>
+
+</body>
+</html>

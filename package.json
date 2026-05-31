@@ -1,0 +1,18 @@
+{
+  "name": "vivero-sistema",
+  "version": "1.0.0",
+  "description": "Sistema de Gestión de Vivero - Inventario, Ventas, Reportes",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "init-db": "node database.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "pdfkit": "^0.15.0",
+    "sql.js": "^1.14.1"
+  }
+}
