@@ -630,7 +630,7 @@ app.post('/api/facturacion/cancelar-pendiente', requireRole('Administrador'), as
 });
 
 // ==================== FACTURACION (timbrar) ====================
-app.post('/api/facturacion/timbrar', requireRole('Administrador'), async (req, res) => {
+app.post('/api/facturacion/timbrar', requireRole('Administrador', 'Vendedor'), async (req, res) => {
   try {
     const { venta_id, rfc, razon_social, uso_cfdi, regimen_fiscal_receptor, codigo_postal } = req.body;
     if (!venta_id || !rfc) return res.status(400).json({ error: 'venta_id y RFC requeridos' });
