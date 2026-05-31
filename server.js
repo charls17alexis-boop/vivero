@@ -756,19 +756,22 @@ app.get('/api/facturacion/pdf/:ventaId', async (req, res) => {
     const total = subtotal + iva;
     doc.moveDown(0.5);
     doc.moveTo(350, doc.y).lineTo(550, doc.y).strokeColor('#ccc').stroke();
-    doc.moveDown(0.3);
-
-    doc.font('Helvetica').fontSize(9);
-    doc.text('Subtotal:', 350, doc.y, { width: 200, align: 'right' });
-    doc.text('$' + subtotal.toFixed(2), 350, doc.y - 12, { width: 190, align: 'right' });
-    doc.text('IVA 16%:', 350, doc.y + 4, { width: 200, align: 'right' });
-    doc.text('$' + iva.toFixed(2), 350, doc.y - 8, { width: 190, align: 'right' });
     doc.moveDown(0.5);
-    doc.moveTo(350, doc.y).lineTo(550, doc.y).strokeColor('#1b4332').stroke();
-    doc.moveDown(0.3);
+
+    let ty = doc.y;
+    doc.font('Helvetica').fontSize(9).fillColor('#333');
+    doc.text('Subtotal:', 350, ty, { width: 150, align: 'right' });
+    doc.text('$' + subtotal.toFixed(2), 500, ty, { width: 90, align: 'right' });
+    ty += 14;
+    doc.text('IVA 16%:', 350, ty, { width: 150, align: 'right' });
+    doc.text('$' + iva.toFixed(2), 500, ty, { width: 90, align: 'right' });
+    ty += 18;
+    doc.moveTo(350, ty).lineTo(550, ty).strokeColor('#1b4332').stroke();
+    ty += 8;
     doc.font('Helvetica-Bold').fontSize(11).fillColor('#1b4332');
-    doc.text('Total:', 350, doc.y, { width: 200, align: 'right' });
-    doc.text('$' + total.toFixed(2), 350, doc.y - 14, { width: 190, align: 'right' });
+    doc.text('Total:', 350, ty, { width: 150, align: 'right' });
+    doc.text('$' + total.toFixed(2), 500, ty, { width: 90, align: 'right' });
+    doc.y = ty + 14;
 
     // QR simulado
     doc.moveDown(2);
