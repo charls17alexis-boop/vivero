@@ -736,12 +736,21 @@ document.getElementById('reg-pass').addEventListener('input', validarPassword2);
 document.getElementById('reg-pass2').addEventListener('input', validarPassword2);
 
 // Auto-login desde sessionStorage
-(function init() {
+(async function init() {
   const stored = sessionStorage.getItem('session');
   if (!stored) return;
   try {
     const data = JSON.parse(stored);
     SESSION = data;
+    // Validar que el token aún sea válido en el servidor
+    try {
+      await api('GET', '/api/usuarios');
+    } catch (e) {
+      // Token inválido/expirado (server reiniciado o redeploy)
+      sessionStorage.removeItem('session');
+      SESSION = null;
+      return;
+    }
     document.getElementById('login-page').style.display = 'none';
     document.getElementById('sidebar').style.display = 'flex';
     document.getElementById('main').style.display = 'block';
