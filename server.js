@@ -1012,15 +1012,6 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// Temporary: fix roles endpoint
-app.post('/api/fix-roles', async (req, res) => {
-  try {
-    await execute("UPDATE usuarios SET rol='Administrador' WHERE username='admin'");
-    await execute("UPDATE usuarios SET rol='Vendedor' WHERE username='vendedor'");
-    res.json({ success: true, message: 'Roles corregidos' });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 // ==================== START ====================
 app.listen(PORT, HOST, () => {
   const nets = os.networkInterfaces();
