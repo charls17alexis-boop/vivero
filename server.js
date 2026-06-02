@@ -311,12 +311,15 @@ app.put('/api/usuarios/:id', requireRole('Administrador'), async (req, res) => {
 
 app.delete('/api/usuarios/:id', requireRole('Administrador'), async (req, res) => {
   try {
-    await execute('DELETE FROM usuarios WHERE id=?', [req.params.id]);
+    const id = req.params.id;
+    // Desvincular registros que referencian al usuario
+    await execute('UPDATE ventas SET usuario_id=NULL WHERE usuario_id=?', [id]);
+    await execute('UPDATE personal SET usuario_id=NULL WHERE usuario_id=?', [id]);
+    await execute('UPDATE inventario_movimientos SET usuario_id=NULL WHERE usuario_id=?', [id]);
+    await execute('UPDATE adquisicion_plantas SET usuario_id=NULL WHERE usuario_id=?', [id]);
+    await execute('DELETE FROM usuarios WHERE id=?', [id]);
     res.json({ success: true });
   } catch (e) {
-    if (e.message && e.message.includes('FOREIGN KEY')) {
-      return res.status(400).json({ error: 'No se puede eliminar: el usuario tiene ventas u otros registros asociados' });
-    }
     res.status(500).json({ error: e.message });
   }
 });
@@ -473,9 +476,12 @@ app.put('/api/personal/:id', requireRole('Administrador'), async (req, res) => {
 app.delete('/api/personal/:id', requireRole('Administrador'), async (req, res) => {
   try {
     const emp = await queryOne('SELECT usuario_id FROM personal WHERE id=?', [req.params.id]);
-    await execute('UPDATE personal SET activo = 0 WHERE id = ?', [req.params.id]);
+    await execute('UPDATE personal SET activo=0, usuario_id=NULL WHERE id=?', [req.params.id]);
     if (emp && emp.usuario_id) {
-      await execute('UPDATE usuarios SET activo = 0 WHERE id = ?', [emp.usuario_id]);
+      await execute('UPDATE ventas SET usuario_id=NULL WHERE usuario_id=?', [emp.usuario_id]);
+      await execute('UPDATE inventario_movimientos SET usuario_id=NULL WHERE usuario_id=?', [emp.usuario_id]);
+      await execute('UPDATE adquisicion_plantas SET usuario_id=NULL WHERE usuario_id=?', [emp.usuario_id]);
+      await execute('DELETE FROM usuarios WHERE id=?', [emp.usuario_id]);
     }
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
