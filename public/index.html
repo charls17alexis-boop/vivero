@@ -647,30 +647,8 @@ async function doLogin() {
 
   try {
     const data = await api('POST', '/api/login', { username: u, password: p });
-    SESSION = data;
-    document.getElementById('login-page').style.display = 'none';
-    document.getElementById('sidebar').style.display = 'flex';
-    document.getElementById('main').style.display = 'block';
-    document.getElementById('sb-nombre').textContent = data.nombre;
-    document.getElementById('sb-rol').textContent = data.rol;
-
-    // Roles: Administrador ve todo, Vendedor ve solo lo autorizado
-    if (data.rol === 'Vendedor') {
-      // Eliminar menús y páginas completas que no debe ver
-      const eliminar = ['menu-usuarios','menu-personal','menu-biofabrica','menu-proveedores','menu-calidad','menu-reportes','menu-rendimiento','menu-adquisicion','page-personal','page-biofabrica','page-proveedores','page-calidad','page-reportes','page-rendimiento','page-adquisicion'];
-      eliminar.forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
-      // Eliminar etiquetas de sección huérfanas
-      ['lbl-operaciones','lbl-reportes','lbl-adquisicion'].forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
-      // Ocultar botones "Nuevo/Ajustar" en módulos de solo consulta (Vendedor puede crear/editar clientes y agendar ventas)
-      ['btn-nueva-planta', 'btn-nueva-herramienta', 'btn-ajustar-stock'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.style.display = 'none';
-      });
-    }
-
-    document.getElementById('pw-user').value = data.username;
-    setFecha();
-    await cargarDashboard();
+    sessionStorage.setItem('session', JSON.stringify(data));
+    location.reload();
   } catch (e) {
     document.getElementById('login-error').textContent = e.message;
     document.getElementById('login-error').style.display = 'block';
@@ -757,17 +735,42 @@ document.getElementById('login-pass').addEventListener('keydown', e => { if (e.k
 document.getElementById('reg-pass').addEventListener('input', validarPassword2);
 document.getElementById('reg-pass2').addEventListener('input', validarPassword2);
 
+// Auto-login desde sessionStorage
+(function init() {
+  const stored = sessionStorage.getItem('session');
+  if (!stored) return;
+  try {
+    const data = JSON.parse(stored);
+    SESSION = data;
+    document.getElementById('login-page').style.display = 'none';
+    document.getElementById('sidebar').style.display = 'flex';
+    document.getElementById('main').style.display = 'block';
+    document.getElementById('sb-nombre').textContent = data.nombre;
+    document.getElementById('sb-rol').textContent = data.rol;
+
+    if (data.rol === 'Vendedor') {
+      const eliminar = ['menu-usuarios','menu-personal','menu-biofabrica','menu-proveedores','menu-calidad','menu-reportes','menu-rendimiento','menu-adquisicion','page-personal','page-biofabrica','page-proveedores','page-calidad','page-reportes','page-rendimiento','page-adquisicion'];
+      eliminar.forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
+      ['lbl-operaciones','lbl-reportes','lbl-adquisicion'].forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
+      ['btn-nueva-planta', 'btn-nueva-herramienta', 'btn-ajustar-stock'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+    }
+
+    document.getElementById('pw-user').value = data.username;
+    setFecha();
+    cargarDashboard();
+  } catch (e) { sessionStorage.removeItem('session'); }
+})();
+
 function doLogout() {
   if (SESSION && SESSION.token) {
     fetch(API_BASE + '/api/logout', { method: 'POST', headers: { 'x-auth-token': SESSION.token } }).catch(() => {});
   }
   SESSION = null;
-  document.getElementById('login-page').style.display = 'flex';
-  document.getElementById('sidebar').style.display = 'none';
-  document.getElementById('main').style.display = 'none';
-  document.getElementById('login-user').value = '';
-  document.getElementById('login-pass').value = '';
-  document.getElementById('login-error').style.display = 'none';
+  sessionStorage.removeItem('session');
+  location.reload();
 }
 
 // ============ NAVEGACIÓN ============
