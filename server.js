@@ -484,7 +484,8 @@ app.post('/api/limpiar-ventas', requireRole('Administrador'), async (req, res) =
     await execute('DELETE FROM facturacion');
     await execute('DELETE FROM ventas_detalle');
     await execute('DELETE FROM ventas');
-    res.json({ success: true, message: 'Ventas, detalle y facturas eliminados' });
+    await execute("UPDATE clientes SET compras_totales=0, saldo_actual=0");
+    res.json({ success: true, message: 'Ventas, detalle, facturas y contadores de clientes limpiados' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
