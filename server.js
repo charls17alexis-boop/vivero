@@ -479,6 +479,15 @@ app.delete('/api/personal/:id', requireRole('Administrador'), async (req, res) =
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post('/api/limpiar-ventas', requireRole('Administrador'), async (req, res) => {
+  try {
+    await execute('DELETE FROM facturacion');
+    await execute('DELETE FROM ventas_detalle');
+    await execute('DELETE FROM ventas');
+    res.json({ success: true, message: 'Ventas, detalle y facturas eliminados' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ==================== VENTAS ====================
 app.get('/api/ventas', async (req, res) => {
   try {
