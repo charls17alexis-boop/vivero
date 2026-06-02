@@ -260,7 +260,7 @@ app.get('/api/ventas/por-vendedor', async (req, res) => {
       LEFT JOIN ventas v ON v.usuario_id = u.id
         AND v.created_at >= ? AND v.created_at < ?
         AND v.estado != 'Cancelado'
-      WHERE u.rol = 'Vendedor' AND u.activo = 1
+      WHERE u.rol = 'Vendedor'
       GROUP BY u.id ORDER BY total_ventas DESC
     `, [monthStart, nextMonth]);
     res.json(stats);
@@ -312,12 +312,7 @@ app.put('/api/usuarios/:id', requireRole('Administrador'), async (req, res) => {
 app.delete('/api/usuarios/:id', requireRole('Administrador'), async (req, res) => {
   try {
     const id = req.params.id;
-    // Desvincular registros que referencian al usuario
-    await execute('UPDATE ventas SET usuario_id=NULL WHERE usuario_id=?', [id]);
-    await execute('UPDATE personal SET usuario_id=NULL WHERE usuario_id=?', [id]);
-    await execute('UPDATE inventario_movimientos SET usuario_id=NULL WHERE usuario_id=?', [id]);
-    await execute('UPDATE adquisicion_plantas SET usuario_id=NULL WHERE usuario_id=?', [id]);
-    await execute('DELETE FROM usuarios WHERE id=?', [id]);
+    await execute('UPDATE usuarios SET activo=0 WHERE id=?', [id]);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -478,10 +473,7 @@ app.delete('/api/personal/:id', requireRole('Administrador'), async (req, res) =
     const emp = await queryOne('SELECT usuario_id FROM personal WHERE id=?', [req.params.id]);
     await execute('UPDATE personal SET activo=0, usuario_id=NULL WHERE id=?', [req.params.id]);
     if (emp && emp.usuario_id) {
-      await execute('UPDATE ventas SET usuario_id=NULL WHERE usuario_id=?', [emp.usuario_id]);
-      await execute('UPDATE inventario_movimientos SET usuario_id=NULL WHERE usuario_id=?', [emp.usuario_id]);
-      await execute('UPDATE adquisicion_plantas SET usuario_id=NULL WHERE usuario_id=?', [emp.usuario_id]);
-      await execute('DELETE FROM usuarios WHERE id=?', [emp.usuario_id]);
+      await execute('UPDATE usuarios SET activo=0 WHERE id=?', [emp.usuario_id]);
     }
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
