@@ -691,10 +691,272 @@ app.post('/api/adquisiciones', requireRole('Administrador'), async (req, res) =>
     for (const p of (productos || [])) {
       await execute('INSERT INTO adquisicion_detalle (adquisicion_id, planta_id, variedad, cantidad, precio_unitario, subtotal) VALUES (?,?,?,?,?,?)',
         [adqId, p.planta_id, p.variedad || null, p.cantidad || 1, p.precio_unitario || 0, (p.cantidad || 1) * (p.precio_unitario || 0)]);
-      await execute('UPDATE plantas SET stock = stock + ? WHERE id = ?', [p.cantidad || 0, p.planta_id]);
-      await execute('UPDATE inventario SET stock_actual = stock_actual + ? WHERE producto_tipo="planta" AND producto_id=?', [p.cantidad || 0, p.planta_id]);
+      await execute('UPDATE plantas SET stock = stock + ?, costo_adquisicion = ? WHERE id = ?', [p.cantidad || 0, p.precio_unitario || 0, p.planta_id]);
+      await execute("UPDATE inventario SET stock_actual = stock_actual + ? WHERE producto_tipo = 'planta' AND producto_id = ?", [p.cantidad || 0, p.planta_id]);
     }
     res.json({ success: true, folio, id: adqId });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ==================== COSTOS DE OPERACION ====================
+app.get('/api/costos', async (req, res) => {
+  try {
+    const { mes } = req.query;
+    let sql = 'SELECT * FROM costos_operacion';
+    let params = [];
+    if (mes) {
+      sql += " WHERE strftime('%Y-%m', fecha) = ?";
+      params = [mes];
+    }
+    sql += ' ORDER BY fecha DESC';
+    res.json(await query(sql, params));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/costos', requireRole('Administrador'), async (req, res) => {
+  try {
+    const { tipo, concepto, monto, fecha } = req.body;
+    if (!tipo || !concepto || !monto || !fecha) return res.status(400).json({ error: 'Todos los campos son requeridos' });
+    if (!['directo','indirecto'].includes(tipo)) return res.status(400).json({ error: 'Tipo debe ser directo o indirecto' });
+    const result = await execute("INSERT INTO costos_operacion (tipo, concepto, monto, fecha) VALUES (?,?,?,?)", [tipo, concepto, monto, fecha]);
+    res.json({ success: true, id: result.lastId });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/costos/:id', requireRole('Administrador'), async (req, res) => {
+  try {
+    await execute('DELETE FROM costos_operacion WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ==================== DASHBOARD UTILIDAD NETA ====================
+app.get('/api/dashboard/utilidad', async (req, res) => {
+  try {
+    const today = new Date();
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const mStartISO = monthStart.toISOString();
+    const mEndISO = monthEnd.toISOString();
+
+    // Total ventas del mes
+    const ventas = await queryOne("SELECT COALESCE(SUM(total),0) as total, COUNT(*) as count FROM ventas WHERE created_at >= ? AND created_at < ?", [mStartISO, mEndISO]);
+
+    // Costo adquisicion de plantas vendidas este mes
+    const costAdq = await queryOne(`
+      SELECT COALESCE(SUM(vd.cantidad * COALESCE(p.costo_adquisicion, p.costo, vd.precio_unitario * 0.5)), 0) as total
+      FROM ventas_detalle vd
+      JOIN ventas v ON vd.venta_id = v.id
+      LEFT JOIN plantas p ON vd.producto_tipo='planta' AND vd.producto_id = p.id
+      WHERE v.created_at >= ? AND v.created_at < ?
+    `, [mStartISO, mEndISO]);
+
+    // Costos de operacion del mes
+    const costOp = await queryOne("SELECT COALESCE(SUM(monto),0) as total FROM costos_operacion WHERE strftime('%Y-%m', fecha) = TO_CHAR(CURRENT_DATE, 'YYYY-MM')");
+
+    const totalVentas = Number(ventas.total) || 0;
+    const totalCostoAdq = Number(costAdq.total) || 0;
+    const totalCostOp = Number(costOp.total) || 0;
+    const utilidadBruta = totalVentas - totalCostoAdq;
+    const utilidadNeta = utilidadBruta - totalCostOp;
+    const pctUtilidad = totalVentas > 0 ? (utilidadNeta / totalVentas) * 100 : 0;
+
+    // Precio sugerido: margen objetivo 10-15% despues de costos operacion
+    const plantas = await query("SELECT id, nombre, precio, costo_adquisicion, costo FROM plantas WHERE activo = 1");
+    const sugerencias = plantas.map(p => {
+      const c = Number(p.costo_adquisicion) || Number(p.costo) || 0;
+      // Margen neto: precio - c - (c * tasa_op) donde tasa_op = totalCostOp / totalVentas
+      const tasaOp = totalVentas > 0 ? totalCostOp / totalVentas : 0;
+      const precioSugerido = c / (1 - 0.12 - tasaOp); // 12% margen neto objetivo
+      return {
+        id: p.id,
+        nombre: p.nombre,
+        precio_actual: Number(p.precio) || 0,
+        costo: c,
+        precio_sugerido: Math.round(precioSugerido * 100) / 100,
+        margen_actual: Number(p.precio) > 0 ? (((Number(p.precio) - c) / Number(p.precio)) * 100) : 0
+      };
+    });
+
+    res.json({
+      total_ventas: totalVentas,
+      total_costo_adquisicion: totalCostoAdq,
+      total_costos_operacion: totalCostOp,
+      utilidad_bruta: utilidadBruta,
+      utilidad_neta: utilidadNeta,
+      pct_utilidad: Math.round(pctUtilidad * 100) / 100,
+      ventas_count: ventas.count || 0,
+      sugerencias
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Costo vs Margen: 6 meses
+app.get('/api/dashboard/costo-vs-margen', async (req, res) => {
+  try {
+    const meses = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const label = d.toLocaleDateString('es-MX', { month: 'short', year: 'numeric' });
+      const monthStart = `${y}-${m}-01`;
+      const y2 = d.getMonth() === 11 ? y + 1 : y;
+      const m2 = d.getMonth() === 11 ? 1 : d.getMonth() + 2;
+      const monthEnd = `${y2}-${String(m2).padStart(2, '0')}-01`;
+
+      const ventas = await queryOne("SELECT COALESCE(SUM(total),0) as total FROM ventas WHERE created_at >= ? AND created_at < ?", [monthStart, monthEnd]);
+      const costAdq = await queryOne(`
+        SELECT COALESCE(SUM(vd.cantidad * COALESCE(p.costo_adquisicion, p.costo, 0)), 0) as total
+        FROM ventas_detalle vd JOIN ventas v ON vd.venta_id = v.id
+        LEFT JOIN plantas p ON vd.producto_tipo='planta' AND vd.producto_id = p.id
+        WHERE v.created_at >= ? AND v.created_at < ?
+      `, [monthStart, monthEnd]);
+      const costOp = await queryOne("SELECT COALESCE(SUM(monto),0) as total FROM costos_operacion WHERE fecha >= ? AND fecha < ?", [monthStart, monthEnd]);
+
+      const tVentas = Number(ventas.total) || 0;
+      const tCostos = (Number(costAdq.total) || 0) + (Number(costOp.total) || 0);
+      meses.push({ mes: label, ventas: tVentas, costos: tCostos, utilidad: tVentas - tCostos });
+    }
+    res.json(meses);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// KPIs del dashboard
+app.get('/api/dashboard/kpis', async (req, res) => {
+  try {
+    const today = new Date();
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const mStartISO = monthStart.toISOString();
+    const mEndISO = monthEnd.toISOString();
+
+    // Ticket promedio
+    const ventas = await queryOne("SELECT COALESCE(SUM(total),0) as total, COUNT(*) as count FROM ventas WHERE created_at >= ? AND created_at < ?", [mStartISO, mEndISO]);
+    const ticketProm = ventas.count > 0 ? ventas.total / ventas.count : 0;
+
+    // Planta mas vendida del mes
+    const topPlanta = await queryOne(`
+      SELECT vd.producto_nombre as nombre, SUM(vd.cantidad) as total
+      FROM ventas_detalle vd JOIN ventas v ON vd.venta_id = v.id
+      WHERE v.created_at >= ? AND v.created_at < ?
+      GROUP BY vd.producto_nombre ORDER BY total DESC LIMIT 1
+    `, [mStartISO, mEndISO]);
+
+    // Cliente que mas ha comprado este mes
+    const topCliente = await queryOne(`
+      SELECT c.nombre, COALESCE(SUM(v.total),0) as total
+      FROM ventas v JOIN clientes c ON v.cliente_id = c.id
+      WHERE v.created_at >= ? AND v.created_at < ?
+      GROUP BY c.id ORDER BY total DESC LIMIT 1
+    `, [mStartISO, mEndISO]);
+
+    // Tasa de cumplimiento de inventario
+    const invOk = await queryOne("SELECT COUNT(*) as c FROM plantas WHERE stock >= stock_minimo AND activo = 1");
+    const invTotal = await queryOne("SELECT COUNT(*) as c FROM plantas WHERE activo = 1");
+    const cumplimiento = invTotal.c > 0 ? (invOk.c / invTotal.c) * 100 : 0;
+
+    res.json({
+      ticket_promedio: Math.round(ticketProm * 100) / 100,
+      planta_top: topPlanta ? { nombre: topPlanta.nombre, cantidad: topPlanta.total } : null,
+      cliente_top: topCliente ? { nombre: topCliente.nombre, total: topCliente.total } : null,
+      cumplimiento_inventario: Math.round(cumplimiento * 100) / 100
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Exportar a Excel
+app.get('/api/export/excel', async (req, res) => {
+  try {
+    const XLSX = require('xlsx');
+    const { mes } = req.query;
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = mes || `${y}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const monthStart = `${m}-01`;
+    const y2 = today.getMonth() === 11 ? y + 1 : y;
+    const m2 = today.getMonth() === 11 ? 1 : today.getMonth() + 2;
+    const monthEnd = `${y2}-${String(m2).padStart(2, '0')}-01`;
+
+    const wb = XLSX.utils.book_new();
+
+    // Hoja 1: Ventas
+    const ventas = await query(`
+      SELECT v.folio, c.nombre as cliente, u.nombre as vendedor, v.total, v.metodo_pago, v.created_at as fecha
+      FROM ventas v LEFT JOIN clientes c ON v.cliente_id = c.id LEFT JOIN usuarios u ON v.usuario_id = u.id
+      WHERE v.created_at >= ? AND v.created_at < ? ORDER BY v.created_at
+    `, [monthStart, monthEnd]);
+    for (const v of ventas) {
+      const det = await query('SELECT producto_nombre, cantidad, precio_unitario, subtotal FROM ventas_detalle WHERE venta_id = ?', [v.id]);
+      v.productos = det.map(d => `${d.producto_nombre} x${d.cantidad}`).join(', ');
+      delete v.id;
+    }
+    const ws1 = XLSX.utils.json_to_sheet(ventas.map(v => ({ Folio: v.folio, Cliente: v.cliente, Vendedor: v.vendedor, Productos: v.productos, Total: v.total, Fecha: v.fecha })));
+    XLSX.utils.book_append_sheet(wb, ws1, 'Ventas');
+
+    // Hoja 2: Adquisiciones
+    const adquisiciones = await query('SELECT * FROM adquisicion_plantas WHERE strftime(? || 1, fecha_adquisicion) = ? ORDER BY fecha_adquisicion', ['%Y-%m']);
+    // Simplified: use date range
+    const adq = await query('SELECT * FROM adquisicion_plantas ORDER BY fecha_adquisicion');
+    const adqRows = [];
+    for (const a of adq) {
+      const det = await query(`
+        SELECT ad.*, p.nombre as planta_nombre FROM adquisicion_detalle ad
+        LEFT JOIN plantas p ON ad.planta_id = p.id WHERE ad.adquisicion_id = ?
+      `, [a.id]);
+      for (const d of det) {
+        adqRows.push({ Folio: a.folio, Proveedor: a.proveedor, Fecha: a.fecha_adquisicion, Planta: d.planta_nombre, Cantidad: d.cantidad, 'Costo Unit.': d.precio_unitario, Subtotal: d.subtotal, 'Total Orden': a.total });
+      }
+    }
+    const ws2 = XLSX.utils.json_to_sheet(adqRows);
+    XLSX.utils.book_append_sheet(wb, ws2, 'Adquisiciones');
+
+    // Hoja 3: Costos de operacion
+    const costos = await query("SELECT * FROM costos_operacion WHERE strftime('%Y-%m', fecha) = ? ORDER BY fecha", [m]);
+    const ws3 = XLSX.utils.json_to_sheet(costos.map(c => ({ Tipo: c.tipo, Concepto: c.concepto, Monto: c.monto, Fecha: c.fecha })));
+    XLSX.utils.book_append_sheet(wb, ws3, 'Costos Operacion');
+
+    // Hoja 4: Resumen utilidades
+    const totalVentas = ventas.reduce((s, v) => s + Number(v.total), 0);
+    const costAdq = await queryOne(`
+      SELECT COALESCE(SUM(vd.cantidad * COALESCE(p.costo_adquisicion, p.costo, 0)), 0) as total
+      FROM ventas_detalle vd JOIN ventas v ON vd.venta_id = v.id
+      LEFT JOIN plantas p ON vd.producto_tipo='planta' AND vd.producto_id = p.id
+      WHERE v.created_at >= ? AND v.created_at < ?
+    `, [monthStart, monthEnd]);
+    const costOp = await queryOne("SELECT COALESCE(SUM(monto),0) as total FROM costos_operacion WHERE strftime('%Y-%m', fecha) = ?", [m]);
+    const utilBruta = totalVentas - (Number(costAdq.total) || 0);
+    const utilNeta = utilBruta - (Number(costOp.total) || 0);
+    const ticketPromedio = ventas.length > 0 ? totalVentas / ventas.length : 0;
+
+    const margenes = await query("SELECT id, nombre, precio, costo_adquisicion FROM plantas WHERE activo = 1");
+    const margenRows = margenes.map(p => ({
+      Planta: p.nombre,
+      'Precio Venta': p.precio,
+      'Costo Adq.': p.costo_adquisicion || 0,
+      'Utilidad': (p.precio || 0) - (p.costo_adquisicion || 0),
+      'Margen %': p.precio > 0 ? (((p.precio - (p.costo_adquisicion || 0)) / p.precio) * 100).toFixed(1) + '%' : 'N/A'
+    }));
+
+    const resumenRows = [
+      { Concepto: 'Total Ventas', Valor: totalVentas },
+      { Concepto: 'Total Costo Adquisición', Valor: Number(costAdq.total) || 0 },
+      { Concepto: 'Utilidad Bruta', Valor: utilBruta },
+      { Concepto: 'Costos Operación', Valor: Number(costOp.total) || 0 },
+      { Concepto: 'Utilidad Neta', Valor: utilNeta },
+      { Concepto: 'Ticket Promedio', Valor: Math.round(ticketPromedio * 100) / 100 },
+    ];
+
+    const ws4a = XLSX.utils.json_to_sheet(resumenRows);
+    XLSX.utils.book_append_sheet(wb, ws4a, 'Resumen');
+    const ws4b = XLSX.utils.json_to_sheet(margenRows);
+    XLSX.utils.book_append_sheet(wb, ws4b, 'Margen por Planta');
+
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=Reporte-Vivero-${m}.xlsx`);
+    res.send(buf);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

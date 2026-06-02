@@ -170,6 +170,11 @@ if (!DATABASE_URL) {
       created_at TEXT DEFAULT (datetime('now','localtime')),
       FOREIGN KEY (venta_id) REFERENCES ventas(id)
     );
+    CREATE TABLE IF NOT EXISTS costos_operacion (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT NOT NULL CHECK (tipo IN ('directo','indirecto')),
+      concepto TEXT NOT NULL, monto REAL NOT NULL DEFAULT 0, fecha TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
   `;
 
   async function initDatabase() {
@@ -197,9 +202,10 @@ if (!DATABASE_URL) {
       'ALTER TABLE plantas ADD COLUMN temperatura TEXT',
       'ALTER TABLE plantas ADD COLUMN plagas TEXT',
       'ALTER TABLE plantas ADD COLUMN tiempo_crecimiento TEXT',
-      'ALTER TABLE plantas ADD COLUMN dificultad TEXT DEFAULT \'Fácil\'',
-    ];
-    migrations.forEach(m => { try { db.exec(m); } catch (e) { /* ya existe */ } });
+    'ALTER TABLE plantas ADD COLUMN dificultad TEXT DEFAULT \'Fácil\'',
+    'ALTER TABLE plantas ADD COLUMN costo_adquisicion REAL DEFAULT 0',
+  ];
+  migrations.forEach(m => { try { db.exec(m); } catch (e) { /* ya existe */ } });
     await seedData();
     await seedLaura();
     saveDB();
@@ -443,6 +449,11 @@ const SCHEMA_SQL = `
     cfdi_estado TEXT NOT NULL DEFAULT 'Pendiente', datos_fiscales TEXT,
     created_at TIMESTAMP DEFAULT NOW()
   );
+  CREATE TABLE IF NOT EXISTS costos_operacion (
+    id SERIAL PRIMARY KEY, tipo TEXT NOT NULL CHECK (tipo IN ('directo','indirecto')),
+    concepto TEXT NOT NULL, monto REAL NOT NULL DEFAULT 0, fecha TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+  );
 `;
 
 async function pgMigrate() {
@@ -469,6 +480,7 @@ async function pgMigrate() {
     'ALTER TABLE plantas ADD COLUMN IF NOT EXISTS plagas TEXT',
     'ALTER TABLE plantas ADD COLUMN IF NOT EXISTS tiempo_crecimiento TEXT',
     'ALTER TABLE plantas ADD COLUMN IF NOT EXISTS dificultad TEXT DEFAULT \'Fácil\'',
+    'ALTER TABLE plantas ADD COLUMN IF NOT EXISTS costo_adquisicion REAL DEFAULT 0',
   ];
   for (const m of migrations) {
     try { await pool.query(m); } catch (e) { /* ignorar */ }

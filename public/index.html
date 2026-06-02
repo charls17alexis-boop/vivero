@@ -262,6 +262,7 @@ tr:hover td { background: #faf9f7; }
   <div class="menu-item" data-page="reportes" id="menu-reportes"><span class="icon">&#x1F4CA;</span> Reportes</div>
   <div class="menu-item" data-page="facturacion" id="menu-facturacion"><span class="icon">&#x1F9FE;</span> Facturación</div>
   <div class="menu-item" data-page="rendimiento" id="menu-rendimiento"><span class="icon">&#x1F4C8;</span> Rendimiento</div>
+  <div class="menu-item" data-page="costos" id="menu-costos"><span class="icon">&#x1F4B0;</span> Costos de Operación</div>
   <div class="menu-label" id="lbl-adquisicion">Logística</div>
   <div class="menu-item" data-page="adquisicion" id="menu-adquisicion"><span class="icon">&#x1F33F;</span> Adquisición de Plantas</div>
   <div class="sidebar-bottom" style="display:flex;flex-direction:column;gap:6px">
@@ -300,6 +301,28 @@ tr:hover td { background: #faf9f7; }
       <div class="card">
         <div class="card-header"><span class="card-title">&#x1F4C5; Ventas últimos 30 días</span></div>
         <div class="card-body"><canvas id="chart-30dias" height="200"></canvas></div>
+      </div>
+
+      <!-- Utilidad Neta -->
+      <div class="stats-grid" id="utilidad-stats" style="margin-top:12px;grid-template-columns:repeat(4,1fr)">
+        <div class="stat-card"><div class="stat-icon" style="font-size:24px">&#x1F4B9;</div><div><div class="stat-label">Utilidad Bruta</div><div class="stat-value" id="util-bruta" style="color:var(--verde)">$0</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="font-size:24px">&#x1F4A8;</div><div><div class="stat-label">Costos Operación</div><div class="stat-value" id="util-costos" style="color:#e67e22">$0</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="font-size:24px">&#x1F4C9;</div><div><div class="stat-label">Utilidad Neta</div><div class="stat-value" id="util-neta" style="color:var(--verde)">$0</div></div></div>
+        <div class="stat-card" id="card-pct-utilidad"><div class="stat-icon" style="font-size:24px">&#x1F4CA;</div><div><div class="stat-label">% Utilidad Neta</div><div class="stat-value" id="util-pct" style="color:var(--verde)">0%</div></div></div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">&#x1F4CA; Indicadores Clave del Mes</span></div>
+        <div class="card-body">
+          <div class="stats-grid" id="kpi-grid" style="grid-template-columns:repeat(4,1fr)"></div>
+        </div>
+      </div>
+
+      <!-- Costo vs Margen -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">&#x1F4CA; Costo vs Margen (Últimos 6 meses)</span></div>
+        <div class="card-body"><canvas id="chart-costovsmargen" height="250"></canvas></div>
       </div>
     </div>
   </div>
@@ -345,7 +368,7 @@ tr:hover td { background: #faf9f7; }
       </div>
       <div class="card-body">
         <table id="tabla-plantas">
-          <thead><tr><th>Nombre</th><th>C. Científico</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Stock Mín.</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Nombre</th><th>C. Científico</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Stock Mín.</th><th>Estado</th><th>Margen</th><th>Acciones</th></tr></thead>
           <tbody id="tbody-plantas"></tbody>
         </table>
       </div>
@@ -495,8 +518,9 @@ tr:hover td { background: #faf9f7; }
   <div class="page" id="page-reportes">
     <div class="page-header">
       <div><div class="page-title">Reportes</div><div class="page-subtitle">Estadísticas y análisis</div></div>
-      <div class="search-bar">
+      <div class="search-bar" style="gap:6px">
         <button class="btn btn-primary" onclick="generarPDF()">&#x1F4C4; Exportar PDF</button>
+        <button class="btn btn-primary" onclick="exportarExcel()" style="background:var(--verde)">&#x1F4D1; Exportar Excel</button>
       </div>
     </div>
     <div class="stats-grid" id="reportes-stats"></div>
@@ -569,6 +593,34 @@ tr:hover td { background: #faf9f7; }
           <thead><tr><th>Folio</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Estado</th><th>Acciones</th></tr></thead>
           <tbody id="tbody-adquisicion"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- COSTOS DE OPERACION -->
+  <div class="page" id="page-costos">
+    <div class="page-header">
+      <div><div class="page-title">Costos de Operación</div><div class="page-subtitle">Registro y control de gastos del vivero</div></div>
+      <button class="btn btn-primary" onclick="modalCosto()">+ Nuevo Costo</button>
+    </div>
+    <div class="stats-grid" id="costos-stats" style="grid-template-columns:repeat(2,1fr)"></div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Costos del mes</span></div>
+        <div class="card-body">
+          <table id="tabla-costos">
+            <thead><tr><th>Tipo</th><th>Concepto</th><th>Monto</th><th>Fecha</th><th>Acciones</th></tr></thead>
+            <tbody id="tbody-costos"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Distribución Directos vs Indirectos</span></div>
+        <div class="card-body" style="display:flex;justify-content:center;align-items:center;min-height:250px">
+          <div style="width:250px;height:250px;position:relative">
+            <canvas id="chart-costos-dona"></canvas>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -758,7 +810,7 @@ document.getElementById('reg-pass2').addEventListener('input', validarPassword2)
     document.getElementById('sb-rol').textContent = data.rol;
 
     if (data.rol === 'Vendedor') {
-      const eliminar = ['menu-usuarios','menu-personal','menu-biofabrica','menu-proveedores','menu-calidad','menu-reportes','menu-rendimiento','menu-adquisicion','page-personal','page-biofabrica','page-proveedores','page-calidad','page-reportes','page-rendimiento','page-adquisicion'];
+      const eliminar = ['menu-usuarios','menu-personal','menu-biofabrica','menu-proveedores','menu-calidad','menu-reportes','menu-rendimiento','menu-costos','menu-adquisicion','page-personal','page-biofabrica','page-proveedores','page-calidad','page-reportes','page-rendimiento','page-costos','page-adquisicion'];
       eliminar.forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
       ['lbl-operaciones','lbl-reportes','lbl-adquisicion'].forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
       ['btn-nueva-planta', 'btn-nueva-herramienta', 'btn-ajustar-stock'].forEach(id => {
@@ -811,6 +863,7 @@ function cargarPagina(page) {
     case 'facturacion': cargarFacturacion(); break;
     case 'rendimiento': cargarRendimiento(); break;
     case 'adquisicion': cargarAdquisiciones(); break;
+    case 'costos': cargarCostos(); break;
   }
 }
 
@@ -869,6 +922,54 @@ async function cargarDashboard() {
         data: { labels, datasets: [{ label: 'Ventas diarias', data, borderColor: '#2d6a4f', backgroundColor: 'rgba(45,106,79,0.1)', fill: true, tension: 0.3 }] },
         options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v } } } }
       });
+
+      // Utilidad neta
+      try {
+        const u = await api('GET', '/api/dashboard/utilidad');
+        document.getElementById('util-bruta').textContent = '$' + fmt(u.utilidad_bruta);
+        document.getElementById('util-costos').textContent = '$' + fmt(u.total_costos_operacion);
+        document.getElementById('util-neta').textContent = '$' + fmt(u.utilidad_neta);
+        const pctEl = document.getElementById('util-pct');
+        pctEl.textContent = u.pct_utilidad.toFixed(1) + '%';
+        const pctCard = document.getElementById('card-pct-utilidad');
+        if (u.pct_utilidad >= 10 && u.pct_utilidad <= 15) { pctCard.className = 'stat-card'; pctEl.style.color = 'var(--verde)'; }
+        else if (u.pct_utilidad > 0) { pctCard.className = 'stat-card warn'; pctEl.style.color = '#e67e22'; }
+        else { pctCard.className = 'stat-card alert-red'; pctEl.style.color = '#e74c3c'; }
+      } catch (e) { /* no utilidad data */ }
+
+      // KPIs
+      try {
+        const k = await api('GET', '/api/dashboard/kpis');
+        document.getElementById('kpi-grid').innerHTML = `
+          <div class="stat-card" style="text-align:center"><div style="font-size:28px">&#x1F4B3;</div><div class="stat-label">Ticket Promedio</div><div class="stat-value" style="font-size:20px;color:var(--verde)">$${fmt(k.ticket_promedio)}</div><div style="font-size:11px;color:var(--gris)">Total ventas / # ventas del mes</div></div>
+          <div class="stat-card" style="text-align:center"><div style="font-size:28px">&#x1F331;</div><div class="stat-label">Planta más vendida</div><div class="stat-value" style="font-size:18px;color:var(--verde)">${k.planta_top ? k.planta_top.nombre : '—'}</div><div style="font-size:11px;color:var(--gris)">${k.planta_top ? k.planta_top.cantidad + ' unidades' : 'Sin ventas'}</div></div>
+          <div class="stat-card" style="text-align:center"><div style="font-size:28px">&#x1F464;</div><div class="stat-label">Mejor Cliente</div><div class="stat-value" style="font-size:18px;color:var(--verde)">${k.cliente_top ? k.cliente_top.nombre : '—'}</div><div style="font-size:11px;color:var(--gris)">${k.cliente_top ? '$' + fmt(k.cliente_top.total) + ' en compras' : 'Sin ventas'}</div></div>
+          <div class="stat-card" style="text-align:center"><div style="font-size:28px">&#x1F4E6;</div><div class="stat-label">Cumplimiento Inventario</div><div class="stat-value" style="font-size:20px;color:${k.cumplimiento_inventario >= 70 ? 'var(--verde)' : k.cumplimiento_inventario >= 40 ? '#e67e22' : '#e74c3c'}">${k.cumplimiento_inventario}%</div><div style="font-size:11px;color:var(--gris)">Plantas con stock suficiente</div></div>
+        `;
+      } catch (e) { /* no kpis */ }
+
+      // Costo vs Margen
+      try {
+        const cm = await api('GET', '/api/dashboard/costo-vs-margen');
+        if (window._chartCM) window._chartCM.destroy();
+        const ctx2 = document.getElementById('chart-costovsmargen').getContext('2d');
+        window._chartCM = new Chart(ctx2, {
+          type: 'bar',
+          data: {
+            labels: cm.map(m => m.mes),
+            datasets: [
+              { label: 'Ingresos', data: cm.map(m => m.ventas), backgroundColor: '#2d6a4f', borderRadius: 4 },
+              { label: 'Costos (Adq+Op)', data: cm.map(m => m.costos), backgroundColor: '#e74c3c', borderRadius: 4 },
+              { label: 'Utilidad Neta', data: cm.map(m => m.utilidad), type: 'line', borderColor: '#e67e22', backgroundColor: 'transparent', borderWidth: 3, pointBackgroundColor: '#e67e22', tension: 0.3 }
+            ]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { position: 'top' } },
+            scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v } } }
+          }
+        });
+      } catch (e) { /* no cost vs margen */ }
     } catch (e) { /* no admin dashboard */ }
   } else {
     document.getElementById('admin-dashboard-section').style.display = 'none';
@@ -945,15 +1046,28 @@ async function cargarPlantas() {
       const estado = p.stock <= 0 ? '<span class="badge badge-red">Agotado</span>' :
         p.stock <= p.stock_minimo ? '<span class="badge badge-yellow">Stock bajo</span>' :
         '<span class="badge badge-green">Disponible</span>';
-    const puedeEditar = SESSION && SESSION.rol === 'Administrador';
+      const costoAdq = parseFloat(p.costo_adquisicion) || 0;
+      const precio = parseFloat(p.precio) || 0;
+      const utilidad = precio - costoAdq;
+      const pct = precio > 0 ? (utilidad / precio) * 100 : 0;
+      let margenCls = 'badge-green';
+      let margenIcon = '&#x2705;';
+      if (pct >= 40) { margenCls = 'badge-green'; margenIcon = '&#x1F7E2;'; }
+      else if (pct >= 20) { margenCls = 'badge-yellow'; margenIcon = '&#x1F7E1;'; }
+      else { margenCls = 'badge-red'; margenIcon = '&#x1F534;'; }
+      const margenHtml = costoAdq > 0
+        ? `<span class="${margenCls}">${margenIcon} ${pct.toFixed(1)}%</span><br><small style="color:var(--gris)">$${fmt(utilidad)} ud.</small>`
+        : '<span style="color:var(--gris)">—</span>';
+      const puedeEditar = SESSION && SESSION.rol === 'Administrador';
       return `<tr>
         <td>${p.nombre}</td>
         <td>${p.nombre_cientifico || '—'}</td>
         <td>${p.categoria}</td>
-        <td>$${p.precio}</td>
+        <td>$${fmt(precio)}</td>
         <td>${p.stock}</td>
         <td>${p.stock_minimo}</td>
         <td>${estado}</td>
+        <td style="text-align:center">${margenHtml}</td>
         <td class="actions">
           <button class="btn btn-outline btn-sm" onclick='mostrarFicha(${JSON.stringify(p).replace(/'/g,"&#39;")})' title="Ver ficha técnica">&#x1F4D6; Ficha</button>
           ${puedeEditar ? `<button class="btn btn-edit btn-sm" onclick='modalPlanta(${JSON.stringify(p)})'>&#x270F;&#xFE0F;</button>` : ''}
@@ -1928,21 +2042,12 @@ function modalAdquisicion() {
       </div>
       <div class="form-group"><label>Observaciones</label><textarea rows="2" id="f-obs" placeholder="Notas..."></textarea></div>
       <div class="form-group"><label>Productos</label>
-        <div id="productos-adq">
-          <div class="prod-row" style="display:flex;gap:8px;margin-bottom:8px">
-            <select class="adq-select" style="flex:1;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px"></select>
-            <input type="number" class="adq-cant" placeholder="Cant" style="width:70px;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" value="1" min="1">
-            <input type="number" class="adq-precio" placeholder="Precio" style="width:90px;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" value="0" min="0" step="0.01">
-            <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">&#x2716;</button>
-          </div>
-        </div>
-        <button class="btn btn-outline btn-sm" onclick="agregarProductoAdq()">+ Agregar producto</button>
+        <div id="productos-adq"></div>
+        <button class="btn btn-outline btn-sm" onclick="agregarProductoAdq(plantas)">+ Agregar producto</button>
       </div>
     `;
 
-    document.querySelectorAll('.adq-select').forEach(sel => {
-      sel.innerHTML = plantas.map(p => `<option value="${p.id}">${p.nombre} (stock: ${p.stock})</option>`).join('');
-    });
+    agregarProductoAdq(plantas);
   });
 
   document.getElementById('modal-save-btn').onclick = async () => {
@@ -1957,6 +2062,7 @@ function modalAdquisicion() {
       }
     });
     if (prods.length === 0) return showToast('Agregue al menos un producto', 'error');
+    if (prods.some(p => !p.precio_unitario || p.precio_unitario <= 0)) return showToast('El costo unitario no puede ser 0 o estar vacío', 'error');
 
     try {
       const res = await api('POST', '/api/adquisiciones', {
@@ -1975,21 +2081,32 @@ function modalAdquisicion() {
   abrirModal();
 }
 
-function agregarProductoAdq() {
+function sugerirCostoAdq(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const precio = parseFloat(opt.dataset.precio) || 0;
+  const row = sel.closest('.prod-row');
+  const inp = row.querySelector('.adq-precio');
+  inp.placeholder = 'Sug: $' + (precio * 0.6).toFixed(2);
+  if (parseFloat(inp.value) === 0 || !inp.value) inp.value = (precio * 0.6).toFixed(2);
+}
+
+function agregarProductoAdq(plantas) {
   const container = document.getElementById('productos-adq');
   const row = document.createElement('div');
   row.className = 'prod-row';
-  row.style.cssText = 'display:flex;gap:8px;margin-bottom:8px';
+  row.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:center';
   row.innerHTML = `
-    <select class="adq-select" style="flex:1;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px"></select>
+    <select class="adq-select" style="flex:1;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" onchange="sugerirCostoAdq(this)"></select>
     <input type="number" class="adq-cant" placeholder="Cant" style="width:70px;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" value="1" min="1">
-    <input type="number" class="adq-precio" placeholder="Precio" style="width:90px;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" value="0" min="0" step="0.01">
+    <div style="display:flex;flex-direction:column">
+      <span style="font-size:10px;color:var(--gris);margin-bottom:2px">Costo unit. ($)</span>
+      <input type="number" class="adq-precio" placeholder="Costo $" style="width:100px;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" value="0" min="0" step="0.01">
+    </div>
     <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">&#x2716;</button>
   `;
   container.appendChild(row);
   const sel = row.querySelector('.adq-select');
-  const firstSel = document.querySelector('.adq-select');
-  if (firstSel) sel.innerHTML = firstSel.innerHTML;
+  sel.innerHTML = plantas.map(p => `<option value="${p.id}" data-precio="${p.precio || 0}">${p.nombre} (stock: ${p.stock})</option>`).join('');
 }
 
 function verDetalleAdquisicion(id) {
@@ -2013,6 +2130,109 @@ function verDetalleAdquisicion(id) {
     document.getElementById('modal-actions').style.display = 'none';
   });
   abrirModal();
+}
+
+// ============ COSTOS DE OPERACION ============
+async function cargarCostos() {
+  try {
+    const data = await api('GET', '/api/costos');
+    document.getElementById('tbody-costos').innerHTML = data.map(c => `
+      <tr>
+        <td><span class="badge ${c.tipo === 'directo' ? 'badge-yellow' : 'badge'}">${c.tipo.charAt(0).toUpperCase() + c.tipo.slice(1)}</span></td>
+        <td>${c.concepto}</td>
+        <td>$${fmt(c.monto)}</td>
+        <td>${c.fecha}</td>
+        <td class="actions"><button class="btn btn-danger btn-sm" onclick="eliminarCosto(${c.id})">&#x1F5D1;</button></td>
+      </tr>
+    `).join('');
+
+    const totalDirecto = data.filter(c => c.tipo === 'directo').reduce((s, c) => s + c.monto, 0);
+    const totalIndirecto = data.filter(c => c.tipo === 'indirecto').reduce((s, c) => s + c.monto, 0);
+    document.getElementById('costos-stats').innerHTML = `
+      <div class="stat-card info"><div class="label">Total Costos Directos</div><div class="value">$${fmt(totalDirecto)}</div><div class="change">Traslados, utilidades, sueldos</div></div>
+      <div class="stat-card warn"><div class="label">Total Costos Indirectos</div><div class="value">$${fmt(totalIndirecto)}</div><div class="change">Fletes, renta, mantenimiento</div></div>
+    `;
+
+    // Dona chart
+    if (window._chartCostos) window._chartCostos.destroy();
+    const ctx = document.getElementById('chart-costos-dona').getContext('2d');
+    window._chartCostos = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Directos', 'Indirectos'],
+        datasets: [{
+          data: [totalDirecto, totalIndirecto],
+          backgroundColor: ['#e67e22', '#3498db'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: { callbacks: { label: ctx => ctx.label + ': $' + fmt(ctx.parsed) } }
+        }
+      }
+    });
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function modalCosto() {
+  document.getElementById('modal-title').textContent = 'Nuevo Costo de Operación';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-group">
+      <label>Tipo</label>
+      <select id="f-costo-tipo" style="width:100%;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px">
+        <option value="directo">Directo</option>
+        <option value="indirecto">Indirecto</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Concepto</label>
+      <input type="text" id="f-costo-concepto" style="width:100%;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" placeholder="Ej: Gasolina, Renta, Agua...">
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1">
+        <label>Monto ($)</label>
+        <input type="number" id="f-costo-monto" style="width:100%;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" placeholder="0.00" min="0" step="0.01">
+      </div>
+      <div class="form-group" style="flex:1">
+        <label>Fecha</label>
+        <input type="date" id="f-costo-fecha" style="width:100%;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px" value="${new Date().toISOString().split('T')[0]}">
+      </div>
+    </div>
+  `;
+  document.getElementById('modal-actions').style.display = '';
+  document.getElementById('modal-save-btn').onclick = async () => {
+    const tipo = document.getElementById('f-costo-tipo').value;
+    const concepto = document.getElementById('f-costo-concepto').value.trim();
+    const monto = parseFloat(document.getElementById('f-costo-monto').value);
+    const fecha = document.getElementById('f-costo-fecha').value;
+    if (!concepto) return showToast('El concepto es requerido', 'error');
+    if (!monto || monto <= 0) return showToast('El monto debe ser mayor a 0', 'error');
+    try {
+      await api('POST', '/api/costos', { tipo, concepto, monto, fecha });
+      cerrarModal();
+      showToast('Costo registrado');
+      cargarCostos();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+  abrirModal();
+}
+
+async function eliminarCosto(id) {
+  if (!confirm('¿Eliminar este costo?')) return;
+  try {
+    await api('DELETE', '/api/costos/' + id);
+    showToast('Costo eliminado');
+    cargarCostos();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+// ============ EXPORTAR EXCEL ============
+function exportarExcel() {
+  window.open(API_BASE + '/api/export/excel', '_blank');
 }
 
 // ============ PASSWORD ============
