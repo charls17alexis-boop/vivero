@@ -2,3 +2,7 @@ node_modules/
 vivero.db
 .env
 *.bat
+
+test_*.txt
+*.log
+
