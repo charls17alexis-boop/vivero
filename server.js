@@ -333,8 +333,8 @@ app.get('/api/plantas', async (req, res) => {
 app.post('/api/plantas', requireRole('Administrador'), async (req, res) => {
   try {
     const p = req.body;
-    const r = await execute('INSERT INTO plantas (nombre, nombre_cientifico, categoria, precio, stock, stock_minimo, descripcion) VALUES (?,?,?,?,?,?,?)',
-      [p.nombre, p.nombre_cientifico || null, p.categoria, p.precio, p.stock || 0, p.stock_minimo || 10, p.descripcion || null]);
+    const r = await execute('INSERT INTO plantas (nombre, nombre_cientifico, categoria, precio, costo, stock, stock_minimo, descripcion) VALUES (?,?,?,?,?,?,?,?)',
+      [p.nombre, p.nombre_cientifico || null, p.categoria, p.precio, p.costo || 0, p.stock || 0, p.stock_minimo || 10, p.descripcion || null]);
     const id = r.lastId;
     await execute('INSERT INTO inventario (producto_tipo, producto_id, stock_actual, stock_minimo) VALUES (?,?,?,?)', ['planta', id, p.stock || 0, p.stock_minimo || 10]);
     res.json({ success: true, id });
@@ -344,8 +344,8 @@ app.post('/api/plantas', requireRole('Administrador'), async (req, res) => {
 app.put('/api/plantas/:id', requireRole('Administrador'), async (req, res) => {
   try {
     const p = req.body;
-    await execute('UPDATE plantas SET nombre=?, nombre_cientifico=?, categoria=?, precio=?, stock=?, stock_minimo=?, descripcion=? WHERE id=?',
-      [p.nombre, p.nombre_cientifico, p.categoria, p.precio, p.stock, p.stock_minimo, p.descripcion, req.params.id]);
+    await execute('UPDATE plantas SET nombre=?, nombre_cientifico=?, categoria=?, precio=?, costo=?, stock=?, stock_minimo=?, descripcion=? WHERE id=?',
+      [p.nombre, p.nombre_cientifico, p.categoria, p.precio, p.costo || 0, p.stock, p.stock_minimo, p.descripcion, req.params.id]);
     await execute('UPDATE inventario SET stock_actual=?, stock_minimo=? WHERE producto_tipo="planta" AND producto_id=?', [p.stock, p.stock_minimo, req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
