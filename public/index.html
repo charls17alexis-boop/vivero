@@ -1078,7 +1078,10 @@ async function cargarVentas() {
         <td>${v.metodo_pago}</td>
         <td>${v.fecha_programada || (v.created_at ? v.created_at.split(' ')[0] : '')}</td>
         <td><span class="badge ${v.estado === 'Pagado' ? 'badge-green' : 'badge-yellow'}">${v.estado}</span></td>
-        <td class="actions"><button class="btn btn-edit btn-sm" onclick="verDetalleVenta(${v.id},'${v.folio}')">&#x1F441;&#xFE0F; Ver</button></td>
+        <td class="actions">
+          <button class="btn btn-edit btn-sm" onclick="verDetalleVenta(${v.id},'${v.folio}')">&#x1F441;&#xFE0F; Ver</button>
+          <button class="btn btn-sm" style="background:#2e7d32;color:#fff;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:11px" onclick="mostrarTicket(${v.id},'${v.ticket_number || 'TKT-' + String(v.id).padStart(6, '0')}')">&#x1F4E6; Ticket</button>
+        </td>
       </tr>`
     ).join('');
 
@@ -2071,7 +2074,7 @@ async function mostrarTicket(ventaId, ticketNumber) {
       </div>
     `;
     document.getElementById('modal-actions').style.display = 'none';
-    abrirModal();
+    document.getElementById('modal-generic').classList.add('open');
     window._ultimoTicket = { ventaId, ticketNumber: ticketNumber || 'TKT-' + String(ventaId).padStart(6, '0'), v, prods };
   } catch (e) { showToast('Error al cargar ticket: ' + e.message, 'error'); }
 }
