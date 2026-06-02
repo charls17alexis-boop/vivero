@@ -479,22 +479,6 @@ app.delete('/api/personal/:id', requireRole('Administrador'), async (req, res) =
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/sync-db', requireRole('Administrador'), async (req, res) => {
-  try {
-    await execute("UPDATE plantas SET stock=2 WHERE nombre='Rosa Roja' AND stock=3");
-    const isaac = await queryOne("SELECT id FROM usuarios WHERE username='Isaac'");
-    if (isaac) {
-      const id = isaac.id;
-      await execute('UPDATE ventas SET usuario_id=NULL WHERE usuario_id=?', [id]);
-      await execute('UPDATE personal SET usuario_id=NULL WHERE usuario_id=?', [id]);
-      await execute('UPDATE inventario_movimientos SET usuario_id=NULL WHERE usuario_id=?', [id]);
-      await execute('UPDATE adquisicion_plantas SET usuario_id=NULL WHERE usuario_id=?', [id]);
-      await execute('DELETE FROM usuarios WHERE id=?', [id]);
-    }
-    res.json({ success: true, message: 'Sincronizado' });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 app.post('/api/limpiar-ventas', requireRole('Administrador'), async (req, res) => {
   try {
     await execute('DELETE FROM facturacion');
