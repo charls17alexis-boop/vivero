@@ -176,6 +176,8 @@ if (!DATABASE_URL) {
       'ALTER TABLE ventas ADD COLUMN anticipo REAL NOT NULL DEFAULT 0',
       'ALTER TABLE ventas ADD COLUMN saldo_pendiente REAL NOT NULL DEFAULT 0',
       'ALTER TABLE ventas ADD COLUMN fecha_programada TEXT',
+      'ALTER TABLE ventas ADD COLUMN ticket_number TEXT',
+      'ALTER TABLE plantas ADD COLUMN costo REAL DEFAULT 0',
       'ALTER TABLE facturacion ADD COLUMN datos_fiscales TEXT',
       'ALTER TABLE facturacion ADD COLUMN uuid TEXT',
       'ALTER TABLE facturacion ADD COLUMN fecha_timbrado TEXT',
@@ -186,6 +188,7 @@ if (!DATABASE_URL) {
     ];
     migrations.forEach(m => { try { db.exec(m); } catch (e) { /* ya existe */ } });
     await seedData();
+    await seedLaura();
     saveDB();
     return d;
   }
@@ -200,10 +203,10 @@ if (!DATABASE_URL) {
     await execute("INSERT INTO clientes (nombre,tipo,telefono,email,rfc,limite_credito,compras_totales) VALUES (?,?,?,?,?,?,?)", ['María Sánchez','Particular','228-111-2233','maria@email.com','SAMA890101',5000,8]);
     await execute("INSERT INTO clientes (nombre,tipo,telefono,email,rfc,limite_credito,compras_totales) VALUES (?,?,?,?,?,?,?)", ['Pedro López','Particular','228-444-5566','pedro@mail.com','LOPP750203',3000,3]);
     await execute("INSERT INTO clientes (nombre,tipo,telefono,email,rfc,limite_credito,compras_totales) VALUES (?,?,?,?,?,?,?)", ['Jardines SA de CV','Empresa','228-999-0011','jardines@empresa.mx','JSA880505',50000,22]);
-    await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?)", ['Rosa Roja','Rosa rubiginosa','Flor',85,3,20,'Rosa roja clásica']);
-    await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?)", ['Ficus Benjamina','Ficus benjamina','Árbol',320,45,10,'Árbol ornamental']);
-    await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?)", ['Agave Azul','Agave tequilana','Suculenta',150,28,5,'Agave para mezcal']);
-    await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?)", ['Buganvilia Morada','Bougainvillea glabra','Arbusto',120,0,15,'Arbusto trepador']);
+    await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,costo,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?,?)", ['Rosa Roja','Rosa rubiginosa','Flor',85,45,3,20,'Rosa roja clásica']);
+    await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,costo,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?,?)", ['Ficus Benjamina','Ficus benjamina','Árbol',320,190,45,10,'Árbol ornamental']);
+    await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,costo,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?,?)", ['Agave Azul','Agave tequilana','Suculenta',150,80,28,5,'Agave para mezcal']);
+    await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,costo,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?,?)", ['Buganvilia Morada','Bougainvillea glabra','Arbusto',120,70,0,15,'Arbusto trepador']);
     await execute("INSERT INTO herramientas (nombre,categoria,estado,responsable) VALUES (?,?,?,?)", ['Podadora Stihl','Corte','En mantenimiento','Ana Gómez']);
     await execute("INSERT INTO herramientas (nombre,categoria,estado,responsable) VALUES (?,?,?,?)", ['Regadera 10L','Riego','Disponible',null]);
     await execute("INSERT INTO herramientas (nombre,categoria,estado,responsable) VALUES (?,?,?,?)", ['Motocultor Honda','Labranza','En uso','Carlos Ruiz']);
@@ -233,6 +236,44 @@ if (!DATABASE_URL) {
     await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',2,45,10]);
     await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',3,28,5]);
     await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',4,0,15]);
+  }
+
+  async function seedLaura() {
+    // Agregar Laura Méndez si no existe
+    const laura = await queryOne('SELECT id FROM usuarios WHERE username=?', ['laura']);
+    if (!laura) {
+      const h = bcrypt.hashSync('Vendedor123!', 10);
+      await execute('INSERT INTO usuarios (nombre, username, password, rol) VALUES (?,?,?,?)', ['Laura Méndez', 'laura', h, 'Vendedor']);
+    }
+    // Verificar si ya tiene ventas
+    const r = await queryOne("SELECT COUNT(*) as c FROM ventas WHERE folio LIKE 'F-L%'");
+    if (r && r.c > 0) return;
+    const lauraId = (await queryOne('SELECT id FROM usuarios WHERE username=?', ['laura'])).id;
+    const clientes = [1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 1];
+    const plantas = [
+      { id: 1, precio: 85, costo: 45 },
+      { id: 2, precio: 320, costo: 190 },
+      { id: 3, precio: 150, costo: 80 },
+      { id: 4, precio: 120, costo: 70 },
+    ];
+    for (let i = 1; i <= 15; i++) {
+      const daysAgo = Math.floor(Math.random() * 29);
+      const d = new Date(); d.setDate(d.getDate() - daysAgo);
+      const dateStr = d.toISOString().split('T')[0];
+      const folio = 'F-L' + String(i).padStart(3, '0');
+      const total = 100 + Math.floor(Math.random() * 900);
+      const metodo = ['Efectivo', 'Tarjeta', 'Transferencia'][Math.floor(Math.random() * 3)];
+      await execute('INSERT INTO ventas (folio,cliente_id,total,metodo_pago,usuario_id,estado,created_at,ticket_number) VALUES (?,?,?,?,?,?,?,?)',
+        [folio, clientes[i - 1], total, metodo, lauraId, 'Pagado', dateStr + ' 10:00:00', 'TKT-L' + String(i).padStart(3, '0')]);
+      const venta = await queryOne('SELECT id FROM ventas WHERE folio=?', [folio]);
+      const p = plantas[Math.floor(Math.random() * plantas.length)];
+      const cant = 1 + Math.floor(Math.random() * 5);
+      const subtotal = p.precio * cant;
+      await execute('INSERT INTO ventas_detalle (venta_id,producto_tipo,producto_id,producto_nombre,cantidad,precio_unitario,subtotal) VALUES (?,?,?,?,?,?,?)',
+        [venta.id, 'planta', p.id, ['Rosa Roja', 'Ficus Benjamina', 'Agave Azul', 'Buganvilia Morada'][p.id - 1], cant, p.precio, subtotal]);
+      // Actualizar total con el subtotal real
+      await execute('UPDATE ventas SET total=? WHERE id=?', [subtotal, venta.id]);
+    }
   }
 
   module.exports = { getDB, initDatabase, query, queryOne, execute, lastInsertId };
@@ -362,6 +403,8 @@ async function pgMigrate() {
     'ALTER TABLE ventas ADD COLUMN IF NOT EXISTS anticipo REAL NOT NULL DEFAULT 0',
     'ALTER TABLE ventas ADD COLUMN IF NOT EXISTS saldo_pendiente REAL NOT NULL DEFAULT 0',
     'ALTER TABLE ventas ADD COLUMN IF NOT EXISTS fecha_programada TEXT',
+    'ALTER TABLE ventas ADD COLUMN IF NOT EXISTS ticket_number TEXT',
+    'ALTER TABLE plantas ADD COLUMN IF NOT EXISTS costo REAL DEFAULT 0',
     'ALTER TABLE facturacion ADD COLUMN IF NOT EXISTS datos_fiscales TEXT',
     'ALTER TABLE facturacion ADD COLUMN IF NOT EXISTS uuid TEXT',
     'ALTER TABLE facturacion ADD COLUMN IF NOT EXISTS fecha_timbrado TEXT',
@@ -385,10 +428,10 @@ async function pgSeed() {
   await execute("INSERT INTO clientes (nombre,tipo,telefono,email,rfc,limite_credito,compras_totales) VALUES (?,?,?,?,?,?,?)", ['María Sánchez','Particular','228-111-2233','maria@email.com','SAMA890101',5000,8]);
   await execute("INSERT INTO clientes (nombre,tipo,telefono,email,rfc,limite_credito,compras_totales) VALUES (?,?,?,?,?,?,?)", ['Pedro López','Particular','228-444-5566','pedro@mail.com','LOPP750203',3000,3]);
   await execute("INSERT INTO clientes (nombre,tipo,telefono,email,rfc,limite_credito,compras_totales) VALUES (?,?,?,?,?,?,?)", ['Jardines SA de CV','Empresa','228-999-0011','jardines@empresa.mx','JSA880505',50000,22]);
-  await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?)", ['Rosa Roja','Rosa rubiginosa','Flor',85,3,20,'Rosa roja clásica']);
-  await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?)", ['Ficus Benjamina','Ficus benjamina','Árbol',320,45,10,'Árbol ornamental']);
-  await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?)", ['Agave Azul','Agave tequilana','Suculenta',150,28,5,'Agave para mezcal']);
-  await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?)", ['Buganvilia Morada','Bougainvillea glabra','Arbusto',120,0,15,'Arbusto trepador']);
+  await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,costo,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?,?)", ['Rosa Roja','Rosa rubiginosa','Flor',85,45,3,20,'Rosa roja clásica']);
+  await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,costo,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?,?)", ['Ficus Benjamina','Ficus benjamina','Árbol',320,190,45,10,'Árbol ornamental']);
+  await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,costo,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?,?)", ['Agave Azul','Agave tequilana','Suculenta',150,80,28,5,'Agave para mezcal']);
+  await execute("INSERT INTO plantas (nombre,nombre_cientifico,categoria,precio,costo,stock,stock_minimo,descripcion) VALUES (?,?,?,?,?,?,?,?)", ['Buganvilia Morada','Bougainvillea glabra','Arbusto',120,70,0,15,'Arbusto trepador']);
   await execute("INSERT INTO herramientas (nombre,categoria,estado,responsable) VALUES (?,?,?,?)", ['Podadora Stihl','Corte','En mantenimiento','Ana Gómez']);
   await execute("INSERT INTO herramientas (nombre,categoria,estado,responsable) VALUES (?,?,?,?)", ['Regadera 10L','Riego','Disponible',null]);
   await execute("INSERT INTO herramientas (nombre,categoria,estado,responsable) VALUES (?,?,?,?)", ['Motocultor Honda','Labranza','En uso','Carlos Ruiz']);
@@ -420,6 +463,40 @@ async function pgSeed() {
   await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',4,0,15]);
 }
 
+async function pgSeedLaura() {
+  const laura = await queryOne('SELECT id FROM usuarios WHERE username=?', ['laura']);
+  if (!laura) {
+    const h = bcrypt.hashSync('Vendedor123!', 10);
+    await execute('INSERT INTO usuarios (nombre, username, password, rol) VALUES (?,?,?,?)', ['Laura Méndez', 'laura', h, 'Vendedor']);
+  }
+  const r = await queryOne("SELECT COUNT(*) as c FROM ventas WHERE folio LIKE 'F-L%'");
+  if (r && parseInt(r.c) > 0) return;
+  const lauraId = (await queryOne('SELECT id FROM usuarios WHERE username=?', ['laura'])).id;
+  const clientes = [1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 1];
+  const plantas = [
+    { id: 1, precio: 85, costo: 45 },
+    { id: 2, precio: 320, costo: 190 },
+    { id: 3, precio: 150, costo: 80 },
+    { id: 4, precio: 120, costo: 70 },
+  ];
+  for (let i = 1; i <= 15; i++) {
+    const daysAgo = Math.floor(Math.random() * 29);
+    const d = new Date(); d.setDate(d.getDate() - daysAgo);
+    const dateStr = d.toISOString().split('T')[0];
+    const folio = 'F-L' + String(i).padStart(3, '0');
+    const metodo = ['Efectivo', 'Tarjeta', 'Transferencia'][Math.floor(Math.random() * 3)];
+    const p = plantas[Math.floor(Math.random() * plantas.length)];
+    const cant = 1 + Math.floor(Math.random() * 5);
+    const subtotal = p.precio * cant;
+    const r2 = await execute('INSERT INTO ventas (folio,cliente_id,total,metodo_pago,usuario_id,estado,created_at,ticket_number) VALUES (?,?,?,?,?,?,?,?)',
+      [folio, clientes[i - 1], subtotal, metodo, lauraId, 'Pagado', dateStr + ' 10:00:00', 'TKT-L' + String(i).padStart(3, '0')]);
+    const ventaId = r2.lastId;
+    const nom = ['Rosa Roja', 'Ficus Benjamina', 'Agave Azul', 'Buganvilia Morada'][p.id - 1];
+    await execute('INSERT INTO ventas_detalle (venta_id,producto_tipo,producto_id,producto_nombre,cantidad,precio_unitario,subtotal) VALUES (?,?,?,?,?,?,?)',
+      [ventaId, 'planta', p.id, nom, cant, p.precio, subtotal]);
+  }
+}
+
 async function initDatabase() {
   // Crear tablas
   await pool.query(SCHEMA_SQL);
@@ -427,6 +504,7 @@ async function initDatabase() {
   await pgMigrate();
   // Seed data
   await pgSeed();
+  await pgSeedLaura();
   return pool;
 }
 

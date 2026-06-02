@@ -208,6 +208,74 @@ app.get('/api/dashboard/alertas', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.get('/api/dashboard/admin', async (req, res) => {
+  try {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayStr = today.toISOString();
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthStartStr = monthStart.toISOString();
+    const thirtyDaysAgo = new Date(today.getTime() - 30 * 86400000);
+    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString();
+
+    // Utilidad del día: suma de (subtotal - cantidad * costo) para ventas de hoy
+    const utilDia = await queryOne(`
+      SELECT COALESCE(SUM(vd.subtotal - (vd.cantidad * COALESCE(p.costo, vd.precio_unitario * 0.6))), 0) as total
+      FROM ventas_detalle vd
+      JOIN ventas v ON vd.venta_id = v.id
+      LEFT JOIN plantas p ON vd.producto_tipo='planta' AND vd.producto_id = p.id
+      WHERE v.created_at >= ? AND v.created_at < ?
+    `, [todayStr, new Date(today.getTime() + 86400000).toISOString()]);
+
+    // Utilidad del mes
+    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const utilMes = await queryOne(`
+      SELECT COALESCE(SUM(vd.subtotal - (vd.cantidad * COALESCE(p.costo, vd.precio_unitario * 0.6))), 0) as total
+      FROM ventas_detalle vd
+      JOIN ventas v ON vd.venta_id = v.id
+      LEFT JOIN plantas p ON vd.producto_tipo='planta' AND vd.producto_id = p.id
+      WHERE v.created_at >= ? AND v.created_at < ?
+    `, [monthStartStr, nextMonth.toISOString()]);
+
+    // Ventas de los últimos 30 días agrupadas por día
+    const ventas30 = await query(`
+      SELECT date(created_at) as fecha, COALESCE(SUM(total),0) as total
+      FROM ventas WHERE created_at >= ?
+      GROUP BY date(created_at) ORDER BY fecha
+    `, [thirtyDaysAgoStr]);
+
+    res.json({ utilidad_dia: utilDia.total, utilidad_mes: utilMes.total, ventas_30_dias: ventas30 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/ventas/por-vendedor', async (req, res) => {
+  try {
+    const today = new Date();
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
+    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1).toISOString();
+    const stats = await query(`
+      SELECT u.id, u.nombre,
+        COALESCE(SUM(v.total),0) as total_ventas,
+        COUNT(v.id) as cantidad_ventas
+      FROM usuarios u
+      LEFT JOIN ventas v ON v.usuario_id = u.id
+        AND v.created_at >= ? AND v.created_at < ?
+        AND v.estado != 'Cancelado'
+      WHERE u.rol = 'Vendedor' AND u.activo = 1
+      GROUP BY u.id ORDER BY total_ventas DESC
+    `, [monthStart, nextMonth]);
+    res.json(stats);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/ventas/:id/ticket', async (req, res) => {
+  try {
+    const venta = await queryOne('SELECT v.*, u.nombre as vendedor_nombre FROM ventas v LEFT JOIN usuarios u ON v.usuario_id = u.id WHERE v.id = ?', [req.params.id]);
+    if (!venta) return res.status(404).json({ error: 'Venta no encontrada' });
+    const productos = await query('SELECT * FROM ventas_detalle WHERE venta_id = ?', [req.params.id]);
+    res.json({ venta, productos });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ==================== USUARIOS ====================
 app.get('/api/usuarios', async (req, res) => {
   try { res.json(await query('SELECT id, nombre, username, rol, activo, ultimo_acceso, created_at FROM usuarios')); }
@@ -443,6 +511,8 @@ app.post('/api/ventas', requireRole('Administrador', 'Vendedor'), async (req, re
     const r = await execute('INSERT INTO ventas (folio, cliente_id, total, metodo_pago, usuario_id, estado, tipo_venta, anticipo, saldo_pendiente, fecha_programada) VALUES (?,?,?,?,?,?,?,?,?,?)',
       [folio, cliente_id || null, total, metodo_pago || 'Efectivo', usuario_id || null, estado, tv, ant, saldo, fecha_programada || null]);
     const ventaId = r.lastId;
+    const ticketNumber = 'TKT-' + String(ventaId).padStart(6, '0');
+    await execute('UPDATE ventas SET ticket_number=? WHERE id=?', [ticketNumber, ventaId]);
 
     for (const p of productos) {
       if (p.producto_tipo === 'planta') {
@@ -469,7 +539,7 @@ app.post('/api/ventas', requireRole('Administrador', 'Vendedor'), async (req, re
       await execute('UPDATE clientes SET compras_totales = ? WHERE id = ?', [ventasCliente.c, cliente_id]);
     }
 
-    res.json({ success: true, folio, id: ventaId, total, saldo_pendiente: saldo });
+    res.json({ success: true, folio, id: ventaId, total, saldo_pendiente: saldo, ticket_number: ticketNumber });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

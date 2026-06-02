@@ -81,6 +81,9 @@ body {
 .stat-card.warn .value { color: var(--amarillo); }
 .stat-card.info .value { color: var(--azul); }
 .stat-card .change { font-size: 11px; color: var(--gris); margin-top: 2px; }
+.stat-card:has(.stat-icon) { display: flex; align-items: center; }
+.stat-card .stat-icon { font-size: 28px; margin-right: 12px; }
+.stat-card.highlight { border-left-color: #d4a017; background: #fffbf0; }
 
 .card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 20px; }
 .card-header { padding: 16px 20px; border-bottom: 1px solid var(--gris-claro); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
@@ -258,6 +261,7 @@ tr:hover td { background: #faf9f7; }
   <div class="menu-label" id="lbl-reportes">Reportes</div>
   <div class="menu-item" data-page="reportes" id="menu-reportes"><span class="icon">&#x1F4CA;</span> Reportes</div>
   <div class="menu-item" data-page="facturacion" id="menu-facturacion"><span class="icon">&#x1F9FE;</span> Facturación</div>
+  <div class="menu-item" data-page="rendimiento" id="menu-rendimiento"><span class="icon">&#x1F4C8;</span> Rendimiento</div>
   <div class="menu-label" id="lbl-adquisicion">Logística</div>
   <div class="menu-item" data-page="adquisicion" id="menu-adquisicion"><span class="icon">&#x1F33F;</span> Adquisición de Plantas</div>
   <div class="sidebar-bottom" style="display:flex;flex-direction:column;gap:6px">
@@ -285,6 +289,17 @@ tr:hover td { background: #faf9f7; }
       <div class="card">
         <div class="card-header"><span class="card-title">Alertas de inventario</span></div>
         <div class="card-body-pad"><div id="alertas-lista"></div></div>
+      </div>
+    </div>
+    <div id="admin-dashboard-section" style="display:none">
+      <div class="stats-grid" id="admin-stats">
+        <div class="stat-card"><div class="stat-icon">&#x1F4B0;</div><div><div class="stat-label">Utilidad del día</div><div class="stat-value" id="utilidad-dia">$0</div></div></div>
+        <div class="stat-card"><div class="stat-icon">&#x1F4B5;</div><div><div class="stat-label">Utilidad del mes</div><div class="stat-value" id="utilidad-mes">$0</div></div></div>
+        <div class="stat-card"><div class="stat-icon">&#x1F4C8;</div><div><div class="stat-label">Ventas (30 días)</div><div class="stat-value" id="ventas-30d">$0</div></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">&#x1F4C5; Ventas últimos 30 días</span></div>
+        <div class="card-body"><canvas id="chart-30dias" height="200"></canvas></div>
       </div>
     </div>
   </div>
@@ -521,6 +536,24 @@ tr:hover td { background: #faf9f7; }
           <tbody id="tbody-facturacion"></tbody>
         </table>
       </div>
+    </div>
+  </div>
+
+  <div class="page" id="page-rendimiento">
+    <div class="page-header">
+      <div><div class="page-title">Rendimiento de Vendedores</div><div class="page-subtitle">Comparativa mensual del equipo de ventas</div></div>
+    </div>
+    <div class="card" id="card-resumen-vendedores">
+      <div class="card-header"><span class="card-title">&#x1F3C6; Resumen del mes</span></div>
+      <div class="card-body" style="display:flex;gap:16px;flex-wrap:wrap" id="vendedores-resumen"></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">&#x1F4CA; Comparativa de ventas por vendedor</span></div>
+      <div class="card-body"><canvas id="chart-vendedores" height="200"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">&#x1F4AD; Detalle mensual</span></div>
+      <div class="card-body"><table><thead><tr><th>Vendedor</th><th>Ventas</th><th>Total vendido</th><th>Promedio por venta</th></tr></thead><tbody id="tbody-rendimiento"></tbody></table></div>
     </div>
   </div>
 
@@ -764,6 +797,7 @@ function cargarPagina(page) {
     case 'calidad': cargarCalidad(); break;
     case 'reportes': cargarReportes(); break;
     case 'facturacion': cargarFacturacion(); break;
+    case 'rendimiento': cargarRendimiento(); break;
     case 'adquisicion': cargarAdquisiciones(); break;
   }
 }
@@ -803,6 +837,30 @@ async function cargarDashboard() {
 
     document.getElementById('fecha-hoy').textContent = new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   } catch (e) { showToast(e.message, 'error'); }
+
+  // Admin dashboard extra
+  if (SESSION && SESSION.rol === 'Administrador') {
+    try {
+      document.getElementById('admin-dashboard-section').style.display = '';
+      const ad = await api('GET', '/api/dashboard/admin');
+      document.getElementById('utilidad-dia').textContent = '$' + fmt(ad.utilidad_dia);
+      document.getElementById('utilidad-mes').textContent = '$' + fmt(ad.utilidad_mes);
+      const total30 = ad.ventas_30_dias.reduce((s, v) => s + v.total, 0);
+      document.getElementById('ventas-30d').textContent = '$' + fmt(total30);
+
+      if (window._chart30dias) window._chart30dias.destroy();
+      const ctx = document.getElementById('chart-30dias').getContext('2d');
+      const labels = ad.ventas_30_dias.map(v => v.fecha ? v.fecha.slice(5) : '');
+      const data = ad.ventas_30_dias.map(v => v.total);
+      window._chart30dias = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets: [{ label: 'Ventas diarias', data, borderColor: '#2d6a4f', backgroundColor: 'rgba(45,106,79,0.1)', fill: true, tension: 0.3 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v } } } }
+      });
+    } catch (e) { /* no admin dashboard */ }
+  } else {
+    document.getElementById('admin-dashboard-section').style.display = 'none';
+  }
 }
 
 // ============ USUARIOS ============
@@ -1120,6 +1178,7 @@ function modalVenta() {
       });
       cerrarModal();
       showToast('Venta registrada — Folio: ' + res.folio);
+      mostrarTicket(res.id, res.ticket_number);
       cargarVentas();
     } catch (e) { showToast(e.message, 'error'); }
   };
@@ -1977,7 +2036,152 @@ function filtrarTablaSelect(sel, tablaId, col) {
   });
 }
 
-// ============ UTILIDADES ============
+// ============ TICKET DE COMPRA ============
+async function mostrarTicket(ventaId, ticketNumber) {
+  try {
+    const res = await api('GET', '/api/ventas/' + ventaId + '/ticket');
+    const v = res.venta, prods = res.productos;
+    const iva = v.total * 0.16;
+    const totalConIva = v.total + iva;
+    const subtotal = v.total;
+    document.getElementById('modal-title').textContent = 'Ticket — ' + (ticketNumber || 'TKT-' + String(ventaId).padStart(6, '0'));
+    document.getElementById('modal-body').innerHTML = `
+      <div id="ticket-content" style="font-family:monospace;font-size:11px;max-width:320px;margin:0 auto;background:#fff;padding:16px;border:1px solid #ddd;border-radius:4px">
+        <div style="text-align:center;font-size:13px;font-weight:bold;margin-bottom:8px">VIVERO "EL VERDE"</div>
+        <div style="text-align:center;font-size:9px;color:#666;margin-bottom:12px">Carretera Federal México-Xalapa S/N<br>Sierra de Agua, Perote, Veracruz<br>RFC: VVE-880101-ABC</div>
+        <div style="border-top:1px dashed #999;border-bottom:1px dashed #999;padding:6px 0;margin-bottom:8px;font-size:10px">
+          Ticket: ${ticketNumber || 'TKT-' + String(ventaId).padStart(6, '0')}<br>
+          Fecha: ${new Date(v.created_at).toLocaleString('es-MX')}<br>
+          Vendedor: ${v.vendedor_nombre || '—'}
+        </div>
+        <table style="width:100%;font-size:10px">
+          <thead><tr style="border-bottom:1px solid #999"><th style="text-align:left">Producto</th><th style="text-align:center">Cant</th><th style="text-align:right">P.Unit</th><th style="text-align:right">Importe</th></tr></thead>
+          <tbody>${prods.map(p => `<tr><td>${p.producto_nombre.length > 20 ? p.producto_nombre.slice(0,18)+'…' : p.producto_nombre}</td><td style="text-align:center">${p.cantidad}</td><td style="text-align:right">$${fmt(p.precio_unitario)}</td><td style="text-align:right">$${fmt(p.subtotal)}</td></tr>`).join('')}</tbody>
+        </table>
+        <div style="border-top:1px dashed #999;margin-top:6px;padding-top:6px;font-size:10px">
+          <div style="display:flex;justify-content:space-between"><span>Subtotal:</span><span>$${fmt(subtotal)}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>IVA 16%:</span><span>$${fmt(iva)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:12px;margin-top:4px"><span>TOTAL:</span><span>$${fmt(totalConIva)}</span></div>
+        </div>
+        <div style="text-align:center;font-size:8px;color:#999;margin-top:10px">¡Gracias por su compra!</div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+        <button class="btn btn-primary btn-sm" onclick="descargarTicketPDF(${ventaId})">&#x1F4E5; Descargar PDF</button>
+        <button class="btn btn-outline btn-sm" onclick="imprimirTicket()">&#x1F5A8; Imprimir</button>
+      </div>
+    `;
+    document.getElementById('modal-actions').style.display = 'none';
+    abrirModal();
+    window._ultimoTicket = { ventaId, ticketNumber: ticketNumber || 'TKT-' + String(ventaId).padStart(6, '0'), v, prods };
+  } catch (e) { showToast('Error al cargar ticket: ' + e.message, 'error'); }
+}
+
+function descargarTicketPDF(ventaId) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: [80, 200] });
+  const data = window._ultimoTicket;
+  if (!data) return showToast('Error: datos de ticket no disponibles', 'error');
+  const v = data.v, prods = data.prods;
+  const iva = v.total * 0.16;
+  const totalConIva = v.total + iva;
+  let y = 8;
+  doc.setFontSize(9).setFont('helvetica', 'bold');
+  doc.text('VIVERO "EL VERDE"', 40, y, { align: 'center' });
+  y += 4;
+  doc.setFontSize(6).setFont('helvetica', 'normal');
+  doc.text('Carretera Federal Mxico-Xalapa S/N', 40, y, { align: 'center' });
+  y += 3;
+  doc.text('Sierra de Agua, Perote, Veracruz', 40, y, { align: 'center' });
+  y += 3;
+  doc.text('RFC: VVE-880101-ABC', 40, y, { align: 'center' });
+  y += 5;
+  doc.setDrawColor(150); doc.line(5, y, 75, y);
+  y += 3;
+  doc.setFontSize(6).setFont('helvetica', 'bold');
+  doc.text('Ticket: ' + data.ticketNumber, 5, y); y += 3;
+  doc.setFont('helvetica', 'normal');
+  doc.text('Fecha: ' + new Date(v.created_at).toLocaleString('es-MX'), 5, y); y += 3;
+  doc.text('Vendedor: ' + (v.vendedor_nombre || '—'), 5, y); y += 4;
+  doc.setDrawColor(150); doc.line(5, y, 75, y);
+  y += 3;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Producto', 5, y); doc.text('Cant', 42, y); doc.text('P.Unit', 52, y); doc.text('Importe', 65, y);
+  y += 3;
+  doc.setDrawColor(200); doc.line(5, y, 75, y);
+  y += 2;
+  doc.setFont('helvetica', 'normal');
+  prods.forEach(p => {
+    const nom = p.producto_nombre.length > 16 ? p.producto_nombre.slice(0, 14) + '..' : p.producto_nombre;
+    if (y > 180) { doc.addPage(); y = 8; }
+    doc.text(nom, 5, y);
+    doc.text(String(p.cantidad), 42, y);
+    doc.text('$' + p.precio_unitario.toFixed(2), 52, y);
+    doc.text('$' + p.subtotal.toFixed(2), 65, y);
+    y += 4;
+  });
+  y += 2;
+  doc.setDrawColor(150); doc.line(5, y, 75, y);
+  y += 4;
+  doc.text('Subtotal:', 42, y); doc.text('$' + v.total.toFixed(2), 65, y, { align: 'right' }); y += 4;
+  doc.text('IVA 16%:', 42, y); doc.text('$' + iva.toFixed(2), 65, y, { align: 'right' }); y += 4;
+  doc.setFont('helvetica', 'bold').setFontSize(10);
+  doc.text('TOTAL:', 42, y); doc.text('$' + totalConIva.toFixed(2), 65, y, { align: 'right' });
+  y += 6;
+  doc.setFontSize(7).setFont('helvetica', 'normal');
+  doc.text('Gracias por su compra!', 40, y, { align: 'center' });
+  doc.save('ticket_' + data.ticketNumber + '.pdf');
+}
+
+function imprimirTicket() {
+  const content = document.getElementById('ticket-content');
+  if (!content) return;
+  const win = window.open('', '_blank');
+  win.document.write('<html><head><title>Ticket</title><style>body{font-family:monospace;font-size:11px;padding:16px;max-width:320px;margin:0 auto}table{width:100%;font-size:10px}td,th{padding:2px 4px}</style></head><body>' + content.innerHTML + '</body></html>');
+  win.document.close();
+  win.print();
+}
+
+// ============ RENDIMIENTO VENDEDORES ============
+async function cargarRendimiento() {
+  try {
+    const stats = await api('GET', '/api/ventas/por-vendedor');
+    const resumen = document.getElementById('vendedores-resumen');
+    const max = stats.length > 0 ? Math.max(...stats.map(s => s.total_ventas)) : 0;
+    const mejor = stats.length > 0 ? stats.reduce((a, b) => a.total_ventas > b.total_ventas ? a : b) : null;
+    resumen.innerHTML = stats.map(s => {
+      const esMejor = mejor && s.id === mejor.id;
+      return `<div class="stat-card${esMejor ? ' highlight' : ''}" style="flex:1;min-width:180px">
+        <div class="stat-icon" style="font-size:24px">${esMejor ? '&#x1F3C6;' : '&#x1F464;'}</div>
+        <div><div class="stat-label">${s.nombre}${esMejor ? ' <span style="color:#d4a017;font-size:10px">MEJOR DEL MES</span>' : ''}</div>
+        <div class="stat-value">$${fmt(s.total_ventas)}</div>
+        <div style="font-size:11px;color:var(--gris)">${s.cantidad_ventas} ventas</div></div>
+      </div>`;
+    }).join('');
+
+    document.getElementById('tbody-rendimiento').innerHTML = stats.map(s => {
+      const prom = s.cantidad_ventas > 0 ? s.total_ventas / s.cantidad_ventas : 0;
+      return `<tr><td>${s.nombre}</td><td>${s.cantidad_ventas}</td><td>$${fmt(s.total_ventas)}</td><td>$${fmt(prom)}</td></tr>`;
+    }).join('');
+
+    if (window._chartVendedores) window._chartVendedores.destroy();
+    const ctx = document.getElementById('chart-vendedores').getContext('2d');
+    window._chartVendedores = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: stats.map(s => s.nombre),
+        datasets: [
+          { label: 'Total vendido', data: stats.map(s => s.total_ventas), backgroundColor: '#2d6a4f', borderRadius: 4 },
+          { label: 'Cantidad ventas', data: stats.map(s => s.cantidad_ventas), backgroundColor: '#d4a017', borderRadius: 4 }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'top' } },
+        scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v } } }
+      }
+    });
+  } catch (e) { showToast(e.message, 'error'); }
+}
 function setFecha() {
   document.getElementById('fecha-hoy').textContent = new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 }
@@ -1995,5 +2199,7 @@ function showToast(msg, type) {
   window._toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
 }
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </body>
 </html>
