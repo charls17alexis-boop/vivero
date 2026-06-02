@@ -896,8 +896,6 @@ app.get('/api/export/excel', async (req, res) => {
     XLSX.utils.book_append_sheet(wb, ws1, 'Ventas');
 
     // Hoja 2: Adquisiciones
-    const adquisiciones = await query('SELECT * FROM adquisicion_plantas WHERE strftime(? || 1, fecha_adquisicion) = ? ORDER BY fecha_adquisicion', ['%Y-%m']);
-    // Simplified: use date range
     const adq = await query('SELECT * FROM adquisicion_plantas ORDER BY fecha_adquisicion');
     const adqRows = [];
     for (const a of adq) {
