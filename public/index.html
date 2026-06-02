@@ -978,6 +978,7 @@ function modalPlanta(planta) {
       <div class="form-group"><label>Precio ($)</label><input type="number" step="0.01" id="f-precio" value="${editando ? planta.precio : ''}"></div>
     </div>
     <div class="form-row">
+      <div class="form-group"><label>Costo ($)</label><input type="number" step="0.01" id="f-costo" value="${editando ? (planta.costo || 0) : '0'}"></div>
       <div class="form-group"><label>Stock</label><input type="number" id="f-stock" value="${editando ? planta.stock : '0'}"></div>
       <div class="form-group"><label>Stock mínimo</label><input type="number" id="f-stock-min" value="${editando ? planta.stock_minimo : '10'}"></div>
     </div>
@@ -990,6 +991,7 @@ function modalPlanta(planta) {
       nombre_cientifico: document.getElementById('f-cientifico').value || null,
       categoria: document.getElementById('f-categoria').value,
       precio: parseFloat(document.getElementById('f-precio').value) || 0,
+      costo: parseFloat(document.getElementById('f-costo').value) || 0,
       stock: parseInt(document.getElementById('f-stock').value) || 0,
       stock_minimo: parseInt(document.getElementById('f-stock-min').value) || 10,
       descripcion: document.getElementById('f-desc').value || null
