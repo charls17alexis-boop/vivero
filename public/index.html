@@ -195,7 +195,7 @@ tr:hover td { background: #faf9f7; }
   <div class="login-box">
     <h1>Vivero</h1>
     <hr class="login-sep">
-    <p>Inicie Sesión para acceder</p>
+    <br>
     <input type="text" id="login-user" placeholder="Usuario" autocomplete="username">
     <div style="position:relative">
       <input type="password" id="login-pass" placeholder="Contraseña" autocomplete="current-password" style="width:100%;padding:10px 40px 10px 14px;border:2px solid var(--gris-claro);border-radius:8px;font-size:13px;outline:none;transition:border-color 0.2s">
@@ -435,7 +435,7 @@ tr:hover td { background: #faf9f7; }
     <div class="card">
       <div class="card-body">
         <table>
-          <thead><tr><th>Nombre</th><th>Puesto</th><th>Área</th><th>Turno</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Puesto</th><th>Área</th><th>Turno</th><th>Usuario</th><th>Rol</th><th>Estado</th><th>Acciones</th></tr></thead>
           <tbody id="tbody-personal"></tbody>
         </table>
       </div>
@@ -1416,6 +1416,8 @@ async function cargarPersonal() {
         <td>${e.puesto}</td>
         <td>${e.area}</td>
         <td>${e.turno}</td>
+        <td>${e.username || '<span style="color:#999;font-size:11px">Sin usuario</span>'}</td>
+        <td>${e.usuario_rol ? `<span class="badge ${e.usuario_rol === 'Administrador' ? 'badge-green' : 'badge-blue'}">${e.usuario_rol}</span>` : '<span style="color:#999;font-size:11px">—</span>'}</td>
         <td><span class="badge ${cls}">${e.estado}</span></td>
         <td class="actions">
           <button class="btn btn-edit btn-sm" onclick='modalEmpleado(${JSON.stringify(e)})'>&#x270F;&#xFE0F;</button>
@@ -1440,6 +1442,13 @@ function modalEmpleado(emp) {
       <div class="form-group"><label>Turno</label><select id="f-turno"><option ${editando && emp.turno === 'Matutino' ? 'selected' : ''}>Matutino</option><option ${editando && emp.turno === 'Vespertino' ? 'selected' : ''}>Vespertino</option></select></div>
     </div>
     <div class="form-group"><label>Estado</label><select id="f-estado"><option ${editando && emp.estado === 'Activo' ? 'selected' : ''}>Activo</option><option ${editando && emp.estado === 'Vacaciones' ? 'selected' : ''}>Vacaciones</option><option ${editando && emp.estado === 'Inactivo' ? 'selected' : ''}>Inactivo</option></select></div>
+    <hr style="margin:14px 0;border:none;border-top:1px solid #ddd">
+    <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--verde)">Cuenta de usuario</div>
+    <div class="form-row">
+      <div class="form-group"><label>Usuario (login)</label><input type="text" id="f-username" value="${editando && emp.username ? emp.username : ''}" ${editando && emp.username ? 'readonly style="background:#f0f0f0"' : ''} placeholder="ej. juanperez"></div>
+      <div class="form-group"><label>Contraseña</label><input type="password" id="f-password" placeholder="${editando ? 'Dejar vacío para mantener' : 'Requerido'}"></div>
+    </div>
+    <div class="form-group"><label>Rol</label><select id="f-rol"><option value="Vendedor" ${editando && emp.usuario_rol === 'Vendedor' ? 'selected' : ''}>Vendedor</option><option value="Administrador" ${editando && emp.usuario_rol === 'Administrador' ? 'selected' : ''}>Administrador</option><option value="Ingeniero" ${editando && emp.usuario_rol === 'Ingeniero' ? 'selected' : ''}>Ingeniero</option></select></div>
   `;
 
   document.getElementById('modal-save-btn').onclick = async () => {
@@ -1450,6 +1459,18 @@ function modalEmpleado(emp) {
       turno: document.getElementById('f-turno').value,
       estado: document.getElementById('f-estado').value
     };
+    const u = document.getElementById('f-username').value.trim();
+    const p = document.getElementById('f-password').value;
+    const r = document.getElementById('f-rol').value;
+    if (editando && emp.usuario_id) {
+      data.usuario_id = emp.usuario_id;
+      data.rol = r;
+      if (p) data.password = p;
+    } else if (u) {
+      data.username = u;
+      data.password = p;
+      data.rol = r;
+    }
     try {
       if (editando) { await api('PUT', '/api/personal/' + emp.id, data); }
       else { await api('POST', '/api/personal', data); }

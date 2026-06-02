@@ -101,7 +101,9 @@ if (!DATABASE_URL) {
       id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, puesto TEXT NOT NULL,
       area TEXT NOT NULL, turno TEXT NOT NULL DEFAULT 'Matutino',
       estado TEXT NOT NULL DEFAULT 'Activo', activo INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT DEFAULT (datetime('now','localtime'))
+      usuario_id INTEGER,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
     );
     CREATE TABLE IF NOT EXISTS ventas (
       id INTEGER PRIMARY KEY AUTOINCREMENT, folio TEXT UNIQUE NOT NULL,
@@ -185,6 +187,7 @@ if (!DATABASE_URL) {
       'ALTER TABLE facturacion ADD COLUMN regimen_fiscal_receptor TEXT',
       'ALTER TABLE facturacion ADD COLUMN codigo_postal TEXT',
       'ALTER TABLE facturacion ADD COLUMN razon_social TEXT',
+      'ALTER TABLE personal ADD COLUMN usuario_id INTEGER',
     ];
     migrations.forEach(m => { try { db.exec(m); } catch (e) { /* ya existe */ } });
     await seedData();
@@ -336,6 +339,7 @@ const SCHEMA_SQL = `
     id SERIAL PRIMARY KEY, nombre TEXT NOT NULL, puesto TEXT NOT NULL,
     area TEXT NOT NULL, turno TEXT NOT NULL DEFAULT 'Matutino',
     estado TEXT NOT NULL DEFAULT 'Activo', activo INTEGER NOT NULL DEFAULT 1,
+    usuario_id INTEGER REFERENCES usuarios(id),
     created_at TIMESTAMP DEFAULT NOW()
   );
   CREATE TABLE IF NOT EXISTS ventas (
@@ -412,6 +416,7 @@ async function pgMigrate() {
     'ALTER TABLE facturacion ADD COLUMN IF NOT EXISTS regimen_fiscal_receptor TEXT',
     'ALTER TABLE facturacion ADD COLUMN IF NOT EXISTS codigo_postal TEXT',
     'ALTER TABLE facturacion ADD COLUMN IF NOT EXISTS razon_social TEXT',
+    'ALTER TABLE personal ADD COLUMN IF NOT EXISTS usuario_id INTEGER',
   ];
   for (const m of migrations) {
     try { await pool.query(m); } catch (e) { /* ignorar */ }

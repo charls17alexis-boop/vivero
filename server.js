@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const path = require('path');
-const { getDB, initDatabase, query, queryOne, execute, lastInsertId } = require('./database');
+const { getDB, initDatabase, query, queryOne, execute } = require('./database');
 const PDFDocument = require('pdfkit');
 const os = require('os');
 
@@ -424,14 +424,25 @@ app.post('/api/biofabrica', requireRole('Administrador'), async (req, res) => {
 
 // ==================== PERSONAL ====================
 app.get('/api/personal', async (req, res) => {
-  try { res.json(await query('SELECT * FROM personal WHERE activo = 1')); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    res.json(await query(`
+      SELECT p.*, u.username, u.rol as usuario_rol
+      FROM personal p LEFT JOIN usuarios u ON p.usuario_id = u.id
+      WHERE p.activo = 1
+    `));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/personal', requireRole('Administrador'), async (req, res) => {
   try {
     const e = req.body;
-    await execute('INSERT INTO personal (nombre, puesto, area, turno, estado) VALUES (?,?,?,?,?)', [e.nombre, e.puesto, e.area, e.turno || 'Matutino', e.estado || 'Activo']);
+    let usuarioId = null;
+    if (e.username && e.password) {
+      const h = bcrypt.hashSync(e.password, 10);
+      const r = await execute('INSERT INTO usuarios (nombre, username, password, rol) VALUES (?,?,?,?)', [e.nombre, e.username, h, e.rol || 'Vendedor']);
+      usuarioId = r.lastId;
+    }
+    await execute('INSERT INTO personal (nombre, puesto, area, turno, estado, usuario_id) VALUES (?,?,?,?,?,?)', [e.nombre, e.puesto, e.area, e.turno || 'Matutino', e.estado || 'Activo', usuarioId]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -440,13 +451,27 @@ app.put('/api/personal/:id', requireRole('Administrador'), async (req, res) => {
   try {
     const e = req.body;
     await execute('UPDATE personal SET nombre=?, puesto=?, area=?, turno=?, estado=? WHERE id=?', [e.nombre, e.puesto, e.area, e.turno, e.estado, req.params.id]);
+    if (e.usuario_id) {
+      if (e.password) {
+        const h = bcrypt.hashSync(e.password, 10);
+        await execute('UPDATE usuarios SET nombre=?, password=?, rol=? WHERE id=?', [e.nombre, h, e.rol || 'Vendedor', e.usuario_id]);
+      } else {
+        await execute('UPDATE usuarios SET nombre=?, rol=? WHERE id=?', [e.nombre, e.rol || 'Vendedor', e.usuario_id]);
+      }
+    }
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.delete('/api/personal/:id', requireRole('Administrador'), async (req, res) => {
-  try { await execute('UPDATE personal SET activo = 0 WHERE id = ?', [req.params.id]); res.json({ success: true }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    const emp = await queryOne('SELECT usuario_id FROM personal WHERE id=?', [req.params.id]);
+    await execute('UPDATE personal SET activo = 0 WHERE id = ?', [req.params.id]);
+    if (emp && emp.usuario_id) {
+      await execute('UPDATE usuarios SET activo = 0 WHERE id = ?', [emp.usuario_id]);
+    }
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==================== VENTAS ====================
