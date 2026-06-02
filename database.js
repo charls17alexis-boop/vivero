@@ -242,40 +242,10 @@ if (!DATABASE_URL) {
   }
 
   async function seedLaura() {
-    // Agregar Laura Méndez si no existe
     const laura = await queryOne('SELECT id FROM usuarios WHERE username=?', ['laura']);
     if (!laura) {
       const h = bcrypt.hashSync('Vendedor123!', 10);
       await execute('INSERT INTO usuarios (nombre, username, password, rol) VALUES (?,?,?,?)', ['Laura Méndez', 'laura', h, 'Vendedor']);
-    }
-    // Verificar si ya tiene ventas
-    const r = await queryOne("SELECT COUNT(*) as c FROM ventas WHERE folio LIKE 'F-L%'");
-    if (r && r.c > 0) return;
-    const lauraId = (await queryOne('SELECT id FROM usuarios WHERE username=?', ['laura'])).id;
-    const clientes = [1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 1];
-    const plantas = [
-      { id: 1, precio: 85, costo: 45 },
-      { id: 2, precio: 320, costo: 190 },
-      { id: 3, precio: 150, costo: 80 },
-      { id: 4, precio: 120, costo: 70 },
-    ];
-    for (let i = 1; i <= 15; i++) {
-      const daysAgo = Math.floor(Math.random() * 29);
-      const d = new Date(); d.setDate(d.getDate() - daysAgo);
-      const dateStr = d.toISOString().split('T')[0];
-      const folio = 'F-L' + String(i).padStart(3, '0');
-      const total = 100 + Math.floor(Math.random() * 900);
-      const metodo = ['Efectivo', 'Tarjeta', 'Transferencia'][Math.floor(Math.random() * 3)];
-      await execute('INSERT INTO ventas (folio,cliente_id,total,metodo_pago,usuario_id,estado,created_at,ticket_number) VALUES (?,?,?,?,?,?,?,?)',
-        [folio, clientes[i - 1], total, metodo, lauraId, 'Pagado', dateStr + ' 10:00:00', 'TKT-L' + String(i).padStart(3, '0')]);
-      const venta = await queryOne('SELECT id FROM ventas WHERE folio=?', [folio]);
-      const p = plantas[Math.floor(Math.random() * plantas.length)];
-      const cant = 1 + Math.floor(Math.random() * 5);
-      const subtotal = p.precio * cant;
-      await execute('INSERT INTO ventas_detalle (venta_id,producto_tipo,producto_id,producto_nombre,cantidad,precio_unitario,subtotal) VALUES (?,?,?,?,?,?,?)',
-        [venta.id, 'planta', p.id, ['Rosa Roja', 'Ficus Benjamina', 'Agave Azul', 'Buganvilia Morada'][p.id - 1], cant, p.precio, subtotal]);
-      // Actualizar total con el subtotal real
-      await execute('UPDATE ventas SET total=? WHERE id=?', [subtotal, venta.id]);
     }
   }
 
@@ -473,32 +443,6 @@ async function pgSeedLaura() {
   if (!laura) {
     const h = bcrypt.hashSync('Vendedor123!', 10);
     await execute('INSERT INTO usuarios (nombre, username, password, rol) VALUES (?,?,?,?)', ['Laura Méndez', 'laura', h, 'Vendedor']);
-  }
-  const r = await queryOne("SELECT COUNT(*) as c FROM ventas WHERE folio LIKE 'F-L%'");
-  if (r && parseInt(r.c) > 0) return;
-  const lauraId = (await queryOne('SELECT id FROM usuarios WHERE username=?', ['laura'])).id;
-  const clientes = [1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 1];
-  const plantas = [
-    { id: 1, precio: 85, costo: 45 },
-    { id: 2, precio: 320, costo: 190 },
-    { id: 3, precio: 150, costo: 80 },
-    { id: 4, precio: 120, costo: 70 },
-  ];
-  for (let i = 1; i <= 15; i++) {
-    const daysAgo = Math.floor(Math.random() * 29);
-    const d = new Date(); d.setDate(d.getDate() - daysAgo);
-    const dateStr = d.toISOString().split('T')[0];
-    const folio = 'F-L' + String(i).padStart(3, '0');
-    const metodo = ['Efectivo', 'Tarjeta', 'Transferencia'][Math.floor(Math.random() * 3)];
-    const p = plantas[Math.floor(Math.random() * plantas.length)];
-    const cant = 1 + Math.floor(Math.random() * 5);
-    const subtotal = p.precio * cant;
-    const r2 = await execute('INSERT INTO ventas (folio,cliente_id,total,metodo_pago,usuario_id,estado,created_at,ticket_number) VALUES (?,?,?,?,?,?,?,?)',
-      [folio, clientes[i - 1], subtotal, metodo, lauraId, 'Pagado', dateStr + ' 10:00:00', 'TKT-L' + String(i).padStart(3, '0')]);
-    const ventaId = r2.lastId;
-    const nom = ['Rosa Roja', 'Ficus Benjamina', 'Agave Azul', 'Buganvilia Morada'][p.id - 1];
-    await execute('INSERT INTO ventas_detalle (venta_id,producto_tipo,producto_id,producto_nombre,cantidad,precio_unitario,subtotal) VALUES (?,?,?,?,?,?,?)',
-      [ventaId, 'planta', p.id, nom, cant, p.precio, subtotal]);
   }
 }
 
