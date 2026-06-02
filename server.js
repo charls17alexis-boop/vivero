@@ -310,8 +310,15 @@ app.put('/api/usuarios/:id', requireRole('Administrador'), async (req, res) => {
 });
 
 app.delete('/api/usuarios/:id', requireRole('Administrador'), async (req, res) => {
-  try { await execute('UPDATE usuarios SET activo=0 WHERE id=?', [req.params.id]); res.json({ success: true }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    await execute('DELETE FROM usuarios WHERE id=?', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) {
+    if (e.message && e.message.includes('FOREIGN KEY')) {
+      return res.status(400).json({ error: 'No se puede eliminar: el usuario tiene ventas u otros registros asociados' });
+    }
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/api/usuarios/:id/restore', requireRole('Administrador'), async (req, res) => {
