@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -63,7 +64,7 @@ app.post('/api/login', async (req, res) => {
     const valid = bcrypt.compareSync(password, user.password);
     if (!valid) return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
 
-    await execute('UPDATE usuarios SET ultimo_acceso = datetime("now","localtime") WHERE id = ?', [user.id]);
+    await execute("UPDATE usuarios SET ultimo_acceso = CURRENT_TIMESTAMP WHERE id = ?", [user.id]);
     const token = crypto.randomBytes(32).toString('hex');
     sessions.set(token, { id: user.id, nombre: user.nombre, username: user.username, rol: user.rol, permisos: JSON.parse(user.permisos || '{}') });
 

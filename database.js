@@ -319,15 +319,31 @@ function convertParams(sql, params) {
   return { text: sql.replace(/\?/g, () => `$${++idx}`), values: params };
 }
 
-const query = (sql, params = []) => pool.query(convertParams(sql, params)).then(r => r.rows);
+// Convertir sintaxis SQLite a PostgreSQL
+const IS_PG = true;
+function fixSQL(sql) {
+  return sql
+    .replace(/datetime\(['"]now['"],\s*['"]localtime['"]\)/gi, 'CURRENT_TIMESTAMP')
+    .replace(/date\('now'\)/g, "CURRENT_DATE")
+    .replace(/strftime\('%W',\s*date\('now','start of month'\)\)/g, "EXTRACT(WEEK FROM DATE_TRUNC('month', CURRENT_DATE))")
+    .replace(/strftime\('%W',\s*(\w+(?:\.\w+)?)\)/g, "EXTRACT(WEEK FROM $1)")
+    .replace(/CAST\(strftime\('%W',\s*(\w+(?:\.\w+)?)\) AS INTEGER\)/g, "CAST(EXTRACT(WEEK FROM $1) AS INTEGER)")
+    .replace(/strftime\('%Y-%m',\s*(\w+(?:\.\w+)?)\)/g, "TO_CHAR($1::timestamp, 'YYYY-MM')")
+    .replace(/strftime\('%Y-%m',\s*'now'\)/g, "TO_CHAR(CURRENT_TIMESTAMP, 'YYYY-MM')")
+    .replace(/strftime\('%Y-%m',\s*'now',\s*'-1 month'\)/g, "TO_CHAR(CURRENT_TIMESTAMP - INTERVAL '1 month', 'YYYY-MM')")
+    .replace(/date\('now','start of month'\)/g, "DATE_TRUNC('month', CURRENT_DATE)::date");
+}
+
+const query = (sql, params = []) => pool.query(convertParams(fixSQL(sql), params)).then(r => r.rows);
 const queryOne = async (sql, params = []) => { const rows = await query(sql, params); return rows.length > 0 ? rows[0] : null; };
 const execute = async (sql, params = []) => {
-  const isInsert = /^\s*INSERT\s/i.test(sql);
+  const fixedSql = fixSQL(sql);
+  const isInsert = /^\s*INSERT\s/i.test(fixedSql);
   if (isInsert) {
-    const result = await pool.query(convertParams(sql + ' RETURNING id', params));
+    const result = await pool.query(convertParams(fixedSql + ' RETURNING id', params));
     return { changes: result.rowCount, lastId: result.rows[0]?.id ?? null };
   }
-  const result = await pool.query(convertParams(sql, params));
+  const result = await pool.query(convertParams(fixedSql, params));
   return { changes: result.rowCount, lastId: null };
 };
 const lastInsertId = () => { throw new Error('use execute().lastId en PostgreSQL'); };
@@ -539,4 +555,4 @@ async function initDatabase() {
   return pool;
 }
 
-module.exports = { getDB: () => pool, initDatabase, query, queryOne, execute, lastInsertId };
+module.exports = { getDB: () => pool, initDatabase, query, queryOne, execute, lastInsertId, fixSQL };
