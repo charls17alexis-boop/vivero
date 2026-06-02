@@ -621,7 +621,7 @@ app.delete('/api/facturacion/:id', requireRole('Administrador'), async (req, res
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/facturacion/cancelar-pendiente', requireRole('Administrador'), async (req, res) => {
+app.post('/api/facturacion/cancelar-pendiente', requireRole('Administrador', 'Vendedor'), async (req, res) => {
   try {
     const { venta_id } = req.body;
     await execute('DELETE FROM facturacion WHERE venta_id = ? AND cfdi_estado = \'Pendiente\'', [venta_id]);

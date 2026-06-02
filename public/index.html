@@ -1628,7 +1628,7 @@ async function cargarFacturacion() {
           <td><span class="badge badge-yellow">${v.cfdi_estado || 'Pendiente'}</span></td>
           <td class="actions">
             <button class="btn btn-primary btn-sm" onclick="modalGenerarCFDI(${v.id}, '${v.folio}')">&#x1F4C4; Generar CFDI</button>
-            ${SESSION.rol === 'Administrador' ? `<button class="btn btn-danger btn-sm" onclick="cancelarPendienteFactura(${v.id}, '${v.folio}')">&#x2716;</button>` : ''}
+            <button class="btn btn-danger btn-sm" onclick="cancelarPendienteFactura(${v.id}, '${v.folio}')">&#x2716;</button>
           </td>
         </tr>`
       ).join('');
