@@ -657,7 +657,7 @@ async function doLogin() {
     // Roles: Administrador ve todo, Vendedor ve solo lo autorizado
     if (data.rol === 'Vendedor') {
       // Eliminar menús y páginas completas que no debe ver
-      const eliminar = ['menu-usuarios','menu-personal','menu-biofabrica','menu-proveedores','menu-calidad','menu-reportes','menu-adquisicion','page-personal','page-biofabrica','page-proveedores','page-calidad','page-reportes','page-adquisicion'];
+      const eliminar = ['menu-usuarios','menu-personal','menu-biofabrica','menu-proveedores','menu-calidad','menu-reportes','menu-rendimiento','menu-adquisicion','page-personal','page-biofabrica','page-proveedores','page-calidad','page-reportes','page-rendimiento','page-adquisicion'];
       eliminar.forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
       // Eliminar etiquetas de sección huérfanas
       ['lbl-operaciones','lbl-reportes','lbl-adquisicion'].forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
