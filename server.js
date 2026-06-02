@@ -333,8 +333,9 @@ app.get('/api/plantas', async (req, res) => {
 app.post('/api/plantas', requireRole('Administrador'), async (req, res) => {
   try {
     const p = req.body;
-    const r = await execute('INSERT INTO plantas (nombre, nombre_cientifico, categoria, precio, costo, stock, stock_minimo, descripcion) VALUES (?,?,?,?,?,?,?,?)',
-      [p.nombre, p.nombre_cientifico || null, p.categoria, p.precio, p.costo || 0, p.stock || 0, p.stock_minimo || 10, p.descripcion || null]);
+    const r = await execute('INSERT INTO plantas (nombre, nombre_cientifico, categoria, precio, costo, stock, stock_minimo, descripcion, riego, luz, abono, sustrato, temperatura, plagas, tiempo_crecimiento, dificultad) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+      [p.nombre, p.nombre_cientifico || null, p.categoria, p.precio, p.costo || 0, p.stock || 0, p.stock_minimo || 10, p.descripcion || null,
+       p.riego || null, p.luz || null, p.abono || null, p.sustrato || null, p.temperatura || null, p.plagas || null, p.tiempo_crecimiento || null, p.dificultad || 'Fácil']);
     const id = r.lastId;
     await execute('INSERT INTO inventario (producto_tipo, producto_id, stock_actual, stock_minimo) VALUES (?,?,?,?)', ['planta', id, p.stock || 0, p.stock_minimo || 10]);
     res.json({ success: true, id });
@@ -344,8 +345,9 @@ app.post('/api/plantas', requireRole('Administrador'), async (req, res) => {
 app.put('/api/plantas/:id', requireRole('Administrador'), async (req, res) => {
   try {
     const p = req.body;
-    await execute('UPDATE plantas SET nombre=?, nombre_cientifico=?, categoria=?, precio=?, costo=?, stock=?, stock_minimo=?, descripcion=? WHERE id=?',
-      [p.nombre, p.nombre_cientifico, p.categoria, p.precio, p.costo || 0, p.stock, p.stock_minimo, p.descripcion, req.params.id]);
+    await execute('UPDATE plantas SET nombre=?, nombre_cientifico=?, categoria=?, precio=?, costo=?, stock=?, stock_minimo=?, descripcion=?, riego=?, luz=?, abono=?, sustrato=?, temperatura=?, plagas=?, tiempo_crecimiento=?, dificultad=? WHERE id=?',
+      [p.nombre, p.nombre_cientifico, p.categoria, p.precio, p.costo || 0, p.stock, p.stock_minimo, p.descripcion,
+       p.riego || null, p.luz || null, p.abono || null, p.sustrato || null, p.temperatura || null, p.plagas || null, p.tiempo_crecimiento || null, p.dificultad || 'Fácil', req.params.id]);
     await execute('UPDATE inventario SET stock_actual=?, stock_minimo=? WHERE producto_tipo="planta" AND producto_id=?', [p.stock, p.stock_minimo, req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -826,7 +828,7 @@ app.get('/api/facturacion/pdf/:ventaId', async (req, res) => {
     doc.text('Folio venta: ' + venta.folio);
     doc.text('Folio fiscal: ' + (factura.folio_fiscal || '—'));
     doc.text('UUID: ' + (factura.uuid || '—'));
-    doc.text('Fecha de timbrado: ' + (factura.fecha_timbrado ? new Date(factura.fecha_timbrado).toLocaleString('es-MX') : '—'));
+    doc.text('Fecha de timbrado: ' + (factura.fecha_timbrado ? new Date(factura.fecha_timbrado).toLocaleDateString('es-MX') : '—'));
     doc.text('Método de pago: ' + venta.metodo_pago);
     doc.moveDown(0.5);
 
@@ -895,7 +897,7 @@ app.get('/api/facturacion/pdf/:ventaId', async (req, res) => {
     const leyendaY = doc.y;
     doc.rect(40, leyendaY, 520, 25).fillColor('#fde8e8').fill();
     doc.fillColor('#c0392b').text('Este CFDI es una emulación educativa, no tiene validez fiscal', 45, leyendaY + 5, { align: 'center', width: 510 });
-    doc.text('Generado el ' + new Date().toLocaleString('es-MX'), 45, leyendaY + 15, { align: 'center', width: 510, fontSize: 6 });
+    doc.text('Generado el ' + new Date().toLocaleDateString('es-MX'), 45, leyendaY + 15, { align: 'center', width: 510, fontSize: 6 });
 
     doc.end();
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -909,12 +911,12 @@ app.get('/api/reportes/pdf', async (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename=reporte_vivero.pdf');
     doc.pipe(res);
 
-    const mes = new Date().toLocaleString('es-MX', { month: 'long', year: 'numeric' });
+    const mes = new Date().toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
 
     doc.fontSize(22).font('Helvetica-Bold').text('Vivero — Sistema de Gestión', { align: 'center' });
     doc.fontSize(12).font('Helvetica').text('Reporte del ' + mes, { align: 'center' });
     doc.moveDown(0.3);
-    doc.fontSize(9).fillColor('#666').text('Generado: ' + new Date().toLocaleString('es-MX'), { align: 'center' });
+    doc.fontSize(9).fillColor('#666').text('Generado: ' + new Date().toLocaleDateString('es-MX'), { align: 'center' });
     doc.moveDown(1);
 
     const ventasMes = await queryOne("SELECT COALESCE(SUM(total),0) as t FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");

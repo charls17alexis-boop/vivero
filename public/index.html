@@ -945,7 +945,7 @@ async function cargarPlantas() {
       const estado = p.stock <= 0 ? '<span class="badge badge-red">Agotado</span>' :
         p.stock <= p.stock_minimo ? '<span class="badge badge-yellow">Stock bajo</span>' :
         '<span class="badge badge-green">Disponible</span>';
-    const puedeEditar = SESSION && (SESSION.rol === 'Administrador' || SESSION.rol === 'Vendedor');
+    const puedeEditar = SESSION && SESSION.rol === 'Administrador';
       return `<tr>
         <td>${p.nombre}</td>
         <td>${p.nombre_cientifico || '—'}</td>
@@ -955,8 +955,9 @@ async function cargarPlantas() {
         <td>${p.stock_minimo}</td>
         <td>${estado}</td>
         <td class="actions">
+          <button class="btn btn-outline btn-sm" onclick='mostrarFicha(${JSON.stringify(p).replace(/'/g,"&#39;")})' title="Ver ficha técnica">&#x1F4D6; Ficha</button>
           ${puedeEditar ? `<button class="btn btn-edit btn-sm" onclick='modalPlanta(${JSON.stringify(p)})'>&#x270F;&#xFE0F;</button>` : ''}
-          ${puedeEditar ? `<button class="btn btn-danger btn-sm" onclick="confirmarEliminar('planta', ${p.id}, '${p.nombre}')">&#x1F5D1;</button>` : '<span style="color:var(--gris);font-size:11px">Solo lectura</span>'}
+          ${puedeEditar ? `<button class="btn btn-danger btn-sm" onclick="confirmarEliminar('planta', ${p.id}, '${p.nombre}')">&#x1F5D1;</button>` : ''}
         </td>
       </tr>`;
     }).join('');
@@ -974,15 +975,33 @@ function modalPlanta(planta) {
       <div class="form-group"><label>Nombre científico</label><input type="text" id="f-cientifico" value="${editando ? (planta.nombre_cientifico || '') : ''}"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Categoría</label><select id="f-categoria">${['Flor','Árbol','Suculenta','Arbusto'].map(c => `<option ${editando && planta.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Categoría</label><select id="f-categoria">${['Flor','Árbol','Suculenta','Arbusto','Interior','Exterior','Frutal'].map(c => `<option ${editando && planta.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
       <div class="form-group"><label>Precio ($)</label><input type="number" step="0.01" id="f-precio" value="${editando ? planta.precio : ''}"></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Costo ($)</label><input type="number" step="0.01" id="f-costo" value="${editando ? (planta.costo || 0) : '0'}"></div>
       <div class="form-group"><label>Stock</label><input type="number" id="f-stock" value="${editando ? planta.stock : '0'}"></div>
+    </div>
+    <div class="form-row">
       <div class="form-group"><label>Stock mínimo</label><input type="number" id="f-stock-min" value="${editando ? planta.stock_minimo : '10'}"></div>
+      <div class="form-group"><label>Dificultad</label><select id="f-dificultad">${['Fácil','Intermedio','Difícil'].map(d => `<option ${editando && planta.dificultad === d ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
     </div>
     <div class="form-group"><label>Descripción</label><textarea rows="2" id="f-desc">${editando ? (planta.descripcion || '') : ''}</textarea></div>
+    <hr style="border:none;border-top:1px dashed #ddd;margin:14px 0">
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px">&#x1F4CB; Ficha técnica</div>
+    <div class="form-row">
+      <div class="form-group"><label>Riego</label><input type="text" id="f-riego" value="${editando ? (planta.riego || '') : ''}" placeholder="Ej: 2 veces por semana"></div>
+      <div class="form-group"><label>Luz</label><input type="text" id="f-luz" value="${editando ? (planta.luz || '') : ''}" placeholder="Ej: Luz indirecta"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Abono</label><input type="text" id="f-abono" value="${editando ? (planta.abono || '') : ''}" placeholder="Ej: Fertilizante NPK cada mes"></div>
+      <div class="form-group"><label>Sustrato</label><input type="text" id="f-sustrato" value="${editando ? (planta.sustrato || '') : ''}" placeholder="Ej: Sustrato universal"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Temperatura</label><input type="text" id="f-temp" value="${editando ? (planta.temperatura || '') : ''}" placeholder="Ej: 15°C a 30°C"></div>
+      <div class="form-group"><label>Plagas / Prevención</label><input type="text" id="f-plagas" value="${editando ? (planta.plagas || '') : ''}" placeholder="Ej: Cochinilla — jabón potásico"></div>
+    </div>
+    <div class="form-group"><label>Tiempo de crecimiento</label><input type="text" id="f-crecimiento" value="${editando ? (planta.tiempo_crecimiento || '') : ''}" placeholder="Ej: Moderado: alcanza 1m en 1 año"></div>
   `;
 
   document.getElementById('modal-save-btn').onclick = async () => {
@@ -994,7 +1013,15 @@ function modalPlanta(planta) {
       costo: parseFloat(document.getElementById('f-costo').value) || 0,
       stock: parseInt(document.getElementById('f-stock').value) || 0,
       stock_minimo: parseInt(document.getElementById('f-stock-min').value) || 10,
-      descripcion: document.getElementById('f-desc').value || null
+      descripcion: document.getElementById('f-desc').value || null,
+      riego: document.getElementById('f-riego').value || null,
+      luz: document.getElementById('f-luz').value || null,
+      abono: document.getElementById('f-abono').value || null,
+      sustrato: document.getElementById('f-sustrato').value || null,
+      temperatura: document.getElementById('f-temp').value || null,
+      plagas: document.getElementById('f-plagas').value || null,
+      tiempo_crecimiento: document.getElementById('f-crecimiento').value || null,
+      dificultad: document.getElementById('f-dificultad').value
     };
     try {
       if (editando) {
@@ -1009,6 +1036,46 @@ function modalPlanta(planta) {
   };
 
   abrirModal();
+}
+
+function mostrarFicha(p) {
+  const badgeClass = p.dificultad === 'Fácil' ? 'badge-green' : p.dificultad === 'Intermedio' ? 'badge-yellow' : 'badge-red';
+  document.getElementById('modal-title').textContent = '📖 ' + p.nombre;
+  document.getElementById('modal-body').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div><strong>${p.nombre_cientifico || ''}</strong> · ${p.categoria}</div>
+      <span class="badge ${badgeClass}" style="font-size:13px;padding:4px 14px">${p.dificultad}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div><span style="font-size:11px;color:var(--gris)">Precio</span><div style="font-weight:600;font-size:18px">$${p.precio}</div></div>
+      <div><span style="font-size:11px;color:var(--gris)">Stock</span><div style="font-weight:600;font-size:18px">${p.stock} uds</div></div>
+    </div>
+    ${p.descripcion ? `<p style="font-size:13px;color:var(--gris);margin-bottom:14px">${p.descripcion}</p>` : ''}
+    <hr style="border:none;border-top:1px solid #eee;margin:0 0 14px">
+
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px">🌱 Cuidados</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:6px"><span style="font-size:20px">💧</span><div><div style="font-size:10px;color:var(--gris)">RIEGO</div><div style="font-size:12px">${p.riego || '—'}</div></div></div>
+      <div style="display:flex;align-items:center;gap:6px"><span style="font-size:20px">☀️</span><div><div style="font-size:10px;color:var(--gris)">LUZ</div><div style="font-size:12px">${p.luz || '—'}</div></div></div>
+      <div style="display:flex;align-items:center;gap:6px"><span style="font-size:20px">🌡️</span><div><div style="font-size:10px;color:var(--gris)">TEMPERATURA</div><div style="font-size:12px">${p.temperatura || '—'}</div></div></div>
+      <div style="display:flex;align-items:center;gap:6px"><span style="font-size:20px">🏠</span><div><div style="font-size:10px;color:var(--gris)">SUSTRATO</div><div style="font-size:12px">${p.sustrato || '—'}</div></div></div>
+    </div>
+
+    <hr style="border:none;border-top:1px solid #eee;margin:0 0 14px">
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px">🍎 Nutrición</div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px"><span style="font-size:20px">💩</span><div><div style="font-size:10px;color:var(--gris)">ABONO</div><div style="font-size:12px">${p.abono || '—'}</div></div></div>
+
+    <hr style="border:none;border-top:1px solid #eee;margin:0 0 14px">
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px">🚫 Prevención</div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px"><span style="font-size:20px">🐛</span><div><div style="font-size:10px;color:var(--gris)">PLAGAS</div><div style="font-size:12px">${p.plagas || '—'}</div></div></div>
+
+    <hr style="border:none;border-top:1px solid #eee;margin:0 0 14px">
+    <div style="font-size:13px;font-weight:600;margin-bottom:4px">⏳ Tiempo de crecimiento</div>
+    <div style="font-size:12px">${p.tiempo_crecimiento || '—'}</div>
+  `;
+  document.getElementById('modal-actions').style.display = 'none';
+  abrirModal();
+  document.getElementById('modal-actions').style.display = 'none';
 }
 
 // ============ CLIENTES ============
@@ -2036,7 +2103,7 @@ async function cambiarPassword() {
 
 // ============ MODALES ============
 function abrirModal() { document.getElementById('modal-generic').classList.add('open'); document.getElementById('modal-actions').style.display = ''; }
-function cerrarModal() { document.getElementById('modal-generic').classList.remove('open'); document.getElementById('modal-save-btn').textContent = 'Guardar'; }
+function cerrarModal() { document.getElementById('modal-generic').classList.remove('open'); document.getElementById('modal-actions').style.display = ''; document.getElementById('modal-save-btn').textContent = 'Guardar'; }
 
 document.querySelectorAll('.modal-overlay').forEach(o => {
   o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
