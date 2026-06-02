@@ -1013,13 +1013,6 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// Temporary: debug DB URL (requires auth)
-app.get('/api/debug/db', authMiddleware, (req, res) => {
-  const raw = process.env.DATABASE_URL || 'NOT SET';
-  const masked = raw === 'NOT SET' ? raw : raw.replace(/:(.*?)@/, ':***@');
-  res.json({ DATABASE_URL: masked, user: req.user.nombre });
-});
-
 // ==================== START ====================
 app.listen(PORT, HOST, () => {
   const nets = os.networkInterfaces();
