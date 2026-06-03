@@ -325,6 +325,12 @@ tr:hover td { background: #faf9f7; }
         <div class="card-body"><div id="pagos-alertas"></div></div>
       </div>
 
+      <!-- Alertas de Calidad -->
+      <div class="card" id="card-alertas-calidad" style="display:none">
+        <div class="card-header"><span class="card-title">&#x1F33F; Alertas de Calidad</span></div>
+        <div class="card-body"><div id="calidad-alertas"></div></div>
+      </div>
+
       <!-- Costo vs Margen -->
       <div class="card">
         <div class="card-header"><span class="card-title">&#x1F4CA; Costo vs Margen (Últimos 6 meses)</span></div>
@@ -1005,6 +1011,19 @@ async function cargarDashboard() {
           }
         });
       } catch (e) { /* no cost vs margen */ }
+
+      // Alertas de Calidad
+      try {
+        const caDiv = document.getElementById('calidad-alertas');
+        const caCard = document.getElementById('card-alertas-calidad');
+        if (caDiv && caCard && ad.calidad_alertas && ad.calidad_alertas.length > 0) {
+          caCard.style.display = '';
+          caDiv.innerHTML = ad.calidad_alertas.map(a => {
+            const cls = a.estado_fitosanitario === 'Plaga grave' ? 'alert-red' : 'alert-yellow';
+            return `<div class="alert ${cls}">&#x26A0;&#xFE0F; ${a.lote_producto} — ${a.estado_fitosanitario} (${a.fecha}) — Inspector: ${a.inspector}</div>`;
+          }).join('');
+        }
+      } catch (e) { /* no calidad alertas */ }
     } catch (e) { /* no admin dashboard */ }
   } else {
     document.getElementById('admin-dashboard-section').style.display = 'none';
@@ -1334,7 +1353,6 @@ function modalVenta() {
 
   api('GET', '/api/clientes').then(clientes => {
     api('GET', '/api/plantas').then(plantas => {
-      const plantasConStock = plantas.filter(p => p.stock > 0);
       document.getElementById('modal-body').innerHTML = `
         <div class="form-row">
           <div class="form-group"><label>Cliente</label>
@@ -1374,7 +1392,11 @@ function modalVenta() {
       `;
 
       document.querySelectorAll('.prod-select').forEach(sel => {
-        sel.innerHTML = plantasConStock.map(p => `<option value="${p.id}" data-precio="${p.precio}" data-nombre="${p.nombre}" data-stock="${p.stock}">${p.nombre} — $${p.precio} (stock: ${p.stock})</option>`).join('');
+        sel.innerHTML = plantas.map(p => {
+          const disabled = p.stock <= 0 ? 'disabled' : '';
+          const label = p.stock <= 0 ? `${p.nombre} — $${p.precio} (Agotado)` : `${p.nombre} — $${p.precio} (stock: ${p.stock})`;
+          return `<option value="${p.id}" data-precio="${p.precio}" data-nombre="${p.nombre}" data-stock="${p.stock}" ${disabled}>${label}</option>`;
+        }).join('');
       });
       document.querySelectorAll('.prod-cant').forEach(inp => inp.addEventListener('input', calcTotalVenta));
       document.getElementById('f-anticipo').addEventListener('input', calcTotalVenta);
@@ -1582,7 +1604,12 @@ function agregarProductoVenta() {
 
   const sel = row.querySelector('.prod-select');
   const firstSel = document.querySelector('.prod-select');
-  if (firstSel) sel.innerHTML = firstSel.innerHTML;
+  if (firstSel) {
+    sel.innerHTML = firstSel.innerHTML;
+    // Re-aplicar disabled state desde plantas originales
+    const allOpts = sel.querySelectorAll('option[disabled]');
+    allOpts.forEach(o => o.disabled = true);
+  }
   row.querySelector('.prod-cant').addEventListener('input', calcTotalVenta);
 }
 
@@ -1608,6 +1635,7 @@ async function cargarInventario() {
         i.stock_actual <= i.stock_minimo / 2 ? '<span class="badge badge-red">Crítico</span>' :
         i.stock_actual <= i.stock_minimo ? '<span class="badge badge-yellow">Bajo</span>' :
         '<span class="badge badge-green">OK</span>';
+      const stockBar = i.stock_minimo > 0 ? Math.min(100, Math.round(i.stock_actual / i.stock_minimo * 100)) : 100;
       return `<tr>
         <td>${i.producto_nombre}</td>
         <td>${i.categoria}</td>
@@ -1977,6 +2005,7 @@ function modalProveedor(prov) {
 async function cargarCalidad() {
   try {
     const data = await api('GET', '/api/calidad');
+    const puedeEditar = SESSION && SESSION.rol === 'Administrador';
     document.getElementById('tbody-calidad').innerHTML = data.map(c => {
       const cls = c.estado_fitosanitario === 'Sano' ? 'badge-green' : c.estado_fitosanitario === 'Plaga leve' ? 'badge-yellow' : 'badge-red';
       const stars = '&#x2B50;'.repeat(c.calificacion) + '&#x2606;'.repeat(5 - c.calificacion);
@@ -1986,44 +2015,173 @@ async function cargarCalidad() {
         <td>${c.fecha}</td>
         <td><span class="badge ${cls}">${c.estado_fitosanitario}</span></td>
         <td>${stars}</td>
-        <td><button class="btn btn-edit btn-sm" onclick="showToast('Reporte de ${c.lote_producto}')">&#x1F4CB; Reporte</button></td>
+        <td class="actions">
+          <button class="btn btn-edit btn-sm" onclick="generarReporteCalidad(${c.id})">&#x1F4CB; Reporte</button>
+          ${puedeEditar ? `<button class="btn btn-edit btn-sm" onclick="modalInspeccion(${c.id})">&#x270F;&#xFE0F;</button>` : ''}
+          ${puedeEditar ? `<button class="btn btn-danger btn-sm" onclick="confirmarEliminarInspeccion(${c.id})">&#x1F5D1;</button>` : ''}
+        </td>
       </tr>`;
     }).join('');
   } catch (e) { showToast(e.message, 'error'); }
 }
 
-function modalInspeccion() {
-  document.getElementById('modal-title').textContent = 'Nueva Inspección';
-  document.getElementById('modal-body').innerHTML = `
-    <div class="form-row">
-      <div class="form-group"><label>Lote / Producto</label><input type="text" id="f-lote" placeholder="Ej: Rosa Roja — Lote A"></div>
-      <div class="form-group"><label>Inspector</label><input type="text" id="f-inspector" placeholder="Nombre del inspector"></div>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>Fecha</label><input type="date" id="f-fecha"></div>
-      <div class="form-group"><label>Estado fitosanitario</label><select id="f-estado"><option>Sano</option><option>Plaga leve</option><option>Plaga grave</option><option>Enfermedad</option></select></div>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>Calificación (1-5)</label><input type="number" id="f-calif" min="1" max="5" value="5"></div>
-    </div>
-    <div class="form-group"><label>Observaciones</label><textarea rows="2" id="f-obs"></textarea></div>
-  `;
+function modalInspeccion(id) {
+  const editando = !!id;
+  document.getElementById('modal-title').textContent = editando ? 'Editar Inspección' : 'Nueva Inspección';
+
+  Promise.all([
+    api('GET', '/api/biofabrica'),
+    api('GET', '/api/plantas'),
+    api('GET', '/api/personal'),
+    editando ? api('GET', '/api/calidad').then(lista => lista.find(i => i.id == id)) : Promise.resolve(null)
+  ]).then(([lotes, plantas, personal, inspeccion]) => {
+    const lotesHtml = lotes.map(l => `<option value="${l.lote_id} — ${l.producto}" ${editando && inspeccion && inspeccion.lote_producto === l.lote_id + ' — ' + l.producto ? 'selected' : ''}>${l.lote_id} — ${l.producto}</option>`).join('');
+    const plantasHtml = plantas.map(p => `<option value="${p.nombre}" ${editando && inspeccion && inspeccion.lote_producto === p.nombre ? 'selected' : ''}>${p.nombre}</option>`).join('');
+    const personalHtml = personal.map(p => `<option value="${p.nombre}" ${editando && inspeccion && inspeccion.inspector === p.nombre ? 'selected' : ''}>${p.nombre}</option>`).join('');
+
+    document.getElementById('modal-body').innerHTML = `
+      <div class="form-row">
+        <div class="form-group"><label>Lote / Producto</label>
+          <select id="f-lote" style="width:100%;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px">
+            <optgroup label="Lotes Biofábrica">${lotesHtml}</optgroup>
+            <optgroup label="Plantas del catálogo">${plantasHtml}</optgroup>
+            <option value="__otro__" ${editando && inspeccion && !lotes.find(l => l.lote_id + ' — ' + l.producto === inspeccion.lote_producto) && !plantas.find(p => p.nombre === inspeccion.lote_producto) ? 'selected' : ''}>Otro...</option>
+          </select>
+          <input type="text" id="f-lote-otro" placeholder="Escribir manualmente..." style="width:100%;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px;margin-top:4px;display:none" value="${editando && inspeccion ? (inspeccion.lote_producto || '') : ''}">
+        </div>
+        <div class="form-group"><label>Inspector</label>
+          <select id="f-inspector" style="width:100%;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px">${personalHtml}</select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Fecha</label><input type="date" id="f-fecha" value="${editando && inspeccion ? inspeccion.fecha : ''}"></div>
+        <div class="form-group"><label>Estado fitosanitario</label><select id="f-estado" style="width:100%;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px">
+          <option value="Sano" ${editando && inspeccion && inspeccion.estado_fitosanitario === 'Sano' ? 'selected' : ''}>Sano</option>
+          <option value="Plaga leve" ${editando && inspeccion && inspeccion.estado_fitosanitario === 'Plaga leve' ? 'selected' : ''}>Plaga leve</option>
+          <option value="Plaga grave" ${editando && inspeccion && inspeccion.estado_fitosanitario === 'Plaga grave' ? 'selected' : ''}>Plaga grave</option>
+          <option value="En tratamiento" ${editando && inspeccion && inspeccion.estado_fitosanitario === 'En tratamiento' ? 'selected' : ''}>En tratamiento</option>
+        </select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Calificación</label><select id="f-calif" style="width:100%;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px">
+          ${[5,4,3,2,1].map(n => `<option value="${n}" ${editando && inspeccion && inspeccion.calificacion == n ? 'selected' : ''}>${'&#x2B50;'.repeat(n)}${'&#x2606;'.repeat(5-n)}</option>`).join('')}
+        </select></div>
+      </div>
+      <div class="form-group"><label>Observaciones</label><textarea rows="2" id="f-obs" style="width:100%;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px">${editando && inspeccion ? (inspeccion.observaciones || '') : ''}</textarea></div>
+    `;
+
+    document.getElementById('f-lote').addEventListener('change', function() {
+      document.getElementById('f-lote-otro').style.display = this.value === '__otro__' ? 'block' : 'none';
+    });
+    if (editando && inspeccion && !lotes.find(l => l.lote_id + ' — ' + l.producto === inspeccion.lote_producto) && !plantas.find(p => p.nombre === inspeccion.lote_producto)) {
+      document.getElementById('f-lote').value = '__otro__';
+      document.getElementById('f-lote-otro').style.display = 'block';
+    }
+  });
 
   document.getElementById('modal-save-btn').onclick = async () => {
+    const selLote = document.getElementById('f-lote').value;
+    const loteProducto = selLote === '__otro__' ? document.getElementById('f-lote-otro').value : selLote;
+    const body = {
+      lote_producto: loteProducto,
+      inspector: document.getElementById('f-inspector').value,
+      fecha: document.getElementById('f-fecha').value,
+      estado_fitosanitario: document.getElementById('f-estado').value,
+      calificacion: parseInt(document.getElementById('f-calif').value) || 5,
+      observaciones: document.getElementById('f-obs').value || null
+    };
     try {
-      await api('POST', '/api/calidad', {
-        lote_producto: document.getElementById('f-lote').value,
-        inspector: document.getElementById('f-inspector').value,
-        fecha: document.getElementById('f-fecha').value,
-        estado_fitosanitario: document.getElementById('f-estado').value,
-        calificacion: parseInt(document.getElementById('f-calif').value) || 5,
-        observaciones: document.getElementById('f-obs').value || null
-      });
-      cerrarModal(); showToast('Inspección registrada');
+      if (editando) {
+        await api('PUT', '/api/calidad/' + id, body);
+      } else {
+        await api('POST', '/api/calidad', body);
+      }
+      cerrarModal(); showToast(editando ? 'Inspección actualizada' : 'Inspección registrada');
       cargarCalidad();
     } catch (e) { showToast(e.message, 'error'); }
   };
   abrirModal();
+}
+
+function confirmarEliminarInspeccion(id) {
+  if (!confirm('¿Eliminar esta inspección?')) return;
+  api('DELETE', '/api/calidad/' + id).then(() => { showToast('Inspección eliminada'); cargarCalidad(); }).catch(e => showToast(e.message, 'error'));
+}
+
+function generarReporteCalidad(id) {
+  api('GET', '/api/calidad').then(lista => {
+    const c = lista.find(i => i.id == id);
+    if (!c) return showToast('Inspección no encontrada', 'error');
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const pageW = doc.internal.pageSize.getWidth();
+
+    // Encabezado
+    doc.setFontSize(16);
+    doc.text('VIVERO', pageW / 2, 20, { align: 'center' });
+    doc.setFontSize(12);
+    doc.text('Reporte de Inspección de Calidad', pageW / 2, 28, { align: 'center' });
+    doc.setDrawColor(76, 175, 80);
+    doc.setLineWidth(0.5);
+    doc.line(14, 32, pageW - 14, 32);
+
+    // Datos
+    doc.setFontSize(11);
+    let y = 42;
+    const field = (label, value) => { doc.setFont('helvetica', 'bold'); doc.text(label + ':', 20, y); doc.setFont('helvetica', 'normal'); doc.text(String(value), 65, y); y += 8; };
+    field('Lote / Producto', c.lote_producto);
+    field('Inspector', c.inspector);
+    field('Fecha', c.fecha);
+    field('Estado fitosanitario', c.estado_fitosanitario);
+
+    // Calificación
+    const stars = '★'.repeat(c.calificacion) + '☆'.repeat(5 - c.calificacion);
+    field('Calificación', stars + ' (' + c.calificacion + '/5)');
+
+    y += 4;
+
+    // Observaciones
+    doc.setFont('helvetica', 'bold');
+    doc.text('Observaciones:', 20, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+    const obsLines = doc.splitTextToSize(c.observaciones || 'Sin observaciones.', pageW - 40);
+    doc.text(obsLines, 20, y);
+    y += obsLines.length * 5 + 8;
+
+    // Recomendaciones si es plaga
+    if (c.estado_fitosanitario === 'Plaga leve') {
+      doc.setDrawColor(255, 152, 0);
+      doc.setLineWidth(0.3);
+      doc.rect(18, y - 4, pageW - 36, 40);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(255, 152, 0);
+      doc.text('Recomendaciones de Tratamiento:', 24, y + 2);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(80, 80, 80);
+      const recs = [
+        '1. Aplicar control biológico con Bacillus thuringiensis o Trichoderma.',
+        '2. Aumentar frecuencia de monitoreo a cada 48 horas.',
+        '3. Aislar plantas afectadas del lote principal.',
+        '4. Revisar condiciones de riego y ventilación.',
+      ];
+      recs.forEach((r, i) => { doc.text(r, 24, y + 10 + i * 5); });
+      y += 48;
+    }
+
+    // Pie de página
+    const fechaGen = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
+    doc.setDrawColor(200, 200, 200);
+    doc.line(14, 270, pageW - 14, 270);
+    doc.setFontSize(9);
+    doc.setTextColor(150, 150, 150);
+    doc.text('Fecha de generación: ' + fechaGen, 20, 278);
+    doc.text('Firma del inspector: _________________________', pageW - 90, 278);
+
+    doc.save('Calidad-' + c.lote_producto.replace(/[^a-zA-Z0-9]/g, '-') + '-' + (c.fecha || 'sinfecha') + '.pdf');
+    showToast('Reporte descargado');
+  }).catch(e => showToast(e.message, 'error'));
 }
 
 // ============ REPORTES ============

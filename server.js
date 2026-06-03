@@ -244,7 +244,9 @@ app.get('/api/dashboard/admin', async (req, res) => {
       GROUP BY date(created_at) ORDER BY fecha
     `, [thirtyDaysAgoStr]);
 
-    res.json({ utilidad_dia: utilDia.total, utilidad_mes: utilMes.total, ventas_30_dias: ventas30 });
+    const calidadAlertas = await query("SELECT id, lote_producto, estado_fitosanitario, fecha, inspector FROM calidad_inspecciones WHERE estado_fitosanitario IN ('Plaga grave','En tratamiento') ORDER BY created_at DESC");
+
+    res.json({ utilidad_dia: utilDia.total, utilidad_mes: utilMes.total, ventas_30_dias: ventas30, calidad_alertas: calidadAlertas });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -338,7 +340,6 @@ app.post('/api/plantas', requireRole('Administrador'), async (req, res) => {
       [p.nombre, p.nombre_cientifico || null, p.categoria, p.precio, p.costo || 0, p.stock || 0, p.stock_minimo || 10, p.descripcion || null,
        p.riego || null, p.luz || null, p.abono || null, p.sustrato || null, p.temperatura || null, p.plagas || null, p.tiempo_crecimiento || null, p.dificultad || 'Fácil']);
     const id = r.lastId;
-    await execute('INSERT INTO inventario (producto_tipo, producto_id, stock_actual, stock_minimo) VALUES (?,?,?,?)', ['planta', id, p.stock || 0, p.stock_minimo || 10]);
     res.json({ success: true, id });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -349,7 +350,6 @@ app.put('/api/plantas/:id', requireRole('Administrador'), async (req, res) => {
     await execute('UPDATE plantas SET nombre=?, nombre_cientifico=?, categoria=?, precio=?, costo=?, stock=?, stock_minimo=?, descripcion=?, riego=?, luz=?, abono=?, sustrato=?, temperatura=?, plagas=?, tiempo_crecimiento=?, dificultad=? WHERE id=?',
       [p.nombre, p.nombre_cientifico, p.categoria, p.precio, p.costo || 0, p.stock, p.stock_minimo, p.descripcion,
        p.riego || null, p.luz || null, p.abono || null, p.sustrato || null, p.temperatura || null, p.plagas || null, p.tiempo_crecimiento || null, p.dificultad || 'Fácil', req.params.id]);
-    await execute("UPDATE inventario SET stock_actual=?, stock_minimo=? WHERE producto_tipo='planta' AND producto_id=?", [p.stock, p.stock_minimo, req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -669,7 +669,6 @@ app.post('/api/ventas', requireRole('Administrador', 'Vendedor'), async (req, re
 
       if (p.producto_tipo === 'planta') {
         await execute('UPDATE plantas SET stock = stock - ? WHERE id = ?', [p.cantidad, p.producto_id]);
-        await execute("UPDATE inventario SET stock_actual = stock_actual - ? WHERE producto_tipo='planta' AND producto_id=?", [p.cantidad, p.producto_id]);
       }
     }
 
@@ -709,26 +708,18 @@ app.put('/api/ventas/:id/abono', requireRole('Administrador', 'Vendedor'), async
 // ==================== INVENTARIO ====================
 app.get('/api/inventario', async (req, res) => {
   try {
-    const inventario = await query(`
-      SELECT i.*, p.nombre as producto_nombre, p.categoria
-      FROM inventario i JOIN plantas p ON i.producto_id = p.id AND i.producto_tipo = 'planta'
-      WHERE p.activo = 1 ORDER BY i.stock_actual ASC
-    `);
-    res.json(inventario);
+    const data = await query('SELECT id as producto_id, nombre as producto_nombre, categoria, stock as stock_actual, stock_minimo FROM plantas WHERE activo = 1 ORDER BY stock ASC');
+    res.json(data);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/inventario/movimiento', requireRole('Administrador'), async (req, res) => {
   try {
     const { producto_id, tipo, cantidad, motivo, usuario_id } = req.body;
-    const inv = await queryOne("SELECT * FROM inventario WHERE producto_tipo='planta' AND producto_id=?", [producto_id]);
-    if (!inv) return res.status(404).json({ error: 'Producto no encontrado en inventario' });
-
+    const p = await queryOne('SELECT * FROM plantas WHERE id = ? AND activo = 1', [producto_id]);
+    if (!p) return res.status(404).json({ error: 'Producto no encontrado' });
     const ajuste = tipo === 'Entrada' ? cantidad : -cantidad;
-    await execute('UPDATE inventario SET stock_actual = stock_actual + ?, ultima_actualizacion = datetime("now","localtime") WHERE id = ?', [ajuste, inv.id]);
     await execute('UPDATE plantas SET stock = stock + ? WHERE id = ?', [ajuste, producto_id]);
-    await execute('INSERT INTO inventario_movimientos (inventario_id, producto_tipo, producto_id, tipo, cantidad, motivo, usuario_id) VALUES (?,?,?,?,?,?,?)',
-      [inv.id, 'planta', producto_id, tipo, cantidad, motivo, usuario_id || null]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -800,7 +791,6 @@ app.post('/api/adquisiciones', requireRole('Administrador'), async (req, res) =>
       await execute('INSERT INTO adquisicion_detalle (adquisicion_id, planta_id, variedad, cantidad, precio_unitario, subtotal) VALUES (?,?,?,?,?,?)',
         [adqId, p.planta_id, p.variedad || null, p.cantidad || 1, p.precio_unitario || 0, (p.cantidad || 1) * (p.precio_unitario || 0)]);
       await execute('UPDATE plantas SET stock = stock + ?, costo_adquisicion = ? WHERE id = ?', [p.cantidad || 0, p.precio_unitario || 0, p.planta_id]);
-      await execute("UPDATE inventario SET stock_actual = stock_actual + ? WHERE producto_tipo = 'planta' AND producto_id = ?", [p.cantidad || 0, p.planta_id]);
     }
     res.json({ success: true, folio, id: adqId });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1078,6 +1068,29 @@ app.post('/api/calidad', requireRole('Administrador'), async (req, res) => {
     await execute('INSERT INTO calidad_inspecciones (lote_producto, inspector, fecha, estado_fitosanitario, calificacion, observaciones) VALUES (?,?,?,?,?,?)',
       [c.lote_producto, c.inspector, c.fecha, c.estado_fitosanitario, c.calificacion || 5, c.observaciones || null]);
     res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/calidad/:id', requireRole('Administrador'), async (req, res) => {
+  try {
+    const c = req.body;
+    await execute('UPDATE calidad_inspecciones SET lote_producto=?, inspector=?, fecha=?, estado_fitosanitario=?, calificacion=?, observaciones=? WHERE id=?',
+      [c.lote_producto, c.inspector, c.fecha, c.estado_fitosanitario, c.calificacion || 5, c.observaciones || null, req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/calidad/:id', requireRole('Administrador'), async (req, res) => {
+  try {
+    await execute('DELETE FROM calidad_inspecciones WHERE id=?', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/calidad/alertas', async (req, res) => {
+  try {
+    const alertas = await query("SELECT * FROM calidad_inspecciones WHERE estado_fitosanitario IN ('Plaga grave','En tratamiento') ORDER BY created_at DESC");
+    res.json(alertas);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
