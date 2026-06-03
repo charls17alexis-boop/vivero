@@ -349,7 +349,7 @@ app.put('/api/plantas/:id', requireRole('Administrador'), async (req, res) => {
     await execute('UPDATE plantas SET nombre=?, nombre_cientifico=?, categoria=?, precio=?, costo=?, stock=?, stock_minimo=?, descripcion=?, riego=?, luz=?, abono=?, sustrato=?, temperatura=?, plagas=?, tiempo_crecimiento=?, dificultad=? WHERE id=?',
       [p.nombre, p.nombre_cientifico, p.categoria, p.precio, p.costo || 0, p.stock, p.stock_minimo, p.descripcion,
        p.riego || null, p.luz || null, p.abono || null, p.sustrato || null, p.temperatura || null, p.plagas || null, p.tiempo_crecimiento || null, p.dificultad || 'Fácil', req.params.id]);
-    await execute('UPDATE inventario SET stock_actual=?, stock_minimo=? WHERE producto_tipo="planta" AND producto_id=?', [p.stock, p.stock_minimo, req.params.id]);
+    await execute("UPDATE inventario SET stock_actual=?, stock_minimo=? WHERE producto_tipo='planta' AND producto_id=?", [p.stock, p.stock_minimo, req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -573,7 +573,7 @@ app.post('/api/ventas', requireRole('Administrador', 'Vendedor'), async (req, re
 
       if (p.producto_tipo === 'planta') {
         await execute('UPDATE plantas SET stock = stock - ? WHERE id = ?', [p.cantidad, p.producto_id]);
-        await execute('UPDATE inventario SET stock_actual = stock_actual - ? WHERE producto_tipo="planta" AND producto_id=?', [p.cantidad, p.producto_id]);
+        await execute("UPDATE inventario SET stock_actual = stock_actual - ? WHERE producto_tipo='planta' AND producto_id=?", [p.cantidad, p.producto_id]);
       }
     }
 
@@ -613,7 +613,7 @@ app.get('/api/inventario', async (req, res) => {
 app.post('/api/inventario/movimiento', requireRole('Administrador'), async (req, res) => {
   try {
     const { producto_id, tipo, cantidad, motivo, usuario_id } = req.body;
-    const inv = await queryOne('SELECT * FROM inventario WHERE producto_tipo="planta" AND producto_id=?', [producto_id]);
+    const inv = await queryOne("SELECT * FROM inventario WHERE producto_tipo='planta' AND producto_id=?", [producto_id]);
     if (!inv) return res.status(404).json({ error: 'Producto no encontrado en inventario' });
 
     const ajuste = tipo === 'Entrada' ? cantidad : -cantidad;
