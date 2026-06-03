@@ -377,8 +377,8 @@ app.post('/api/clientes', requireRole('Administrador'), async (req, res) => {
 app.put('/api/clientes/:id', requireRole('Administrador'), async (req, res) => {
   try {
     const c = req.body;
-    await execute('UPDATE clientes SET nombre=?, tipo=?, telefono=?, email=?, rfc=?, limite_credito=?, direccion=? WHERE id=?',
-      [c.nombre, c.tipo, c.telefono, c.email, c.rfc, c.limite_credito, c.direccion, req.params.id]);
+    await execute('UPDATE clientes SET nombre=?, tipo=?, telefono=?, email=?, rfc=?, limite_credito=?, direccion=?, credito_activo=? WHERE id=?',
+      [c.nombre, c.tipo, c.telefono, c.email, c.rfc, c.limite_credito, c.direccion, c.credito_activo ?? 0, req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -386,6 +386,48 @@ app.put('/api/clientes/:id', requireRole('Administrador'), async (req, res) => {
 app.delete('/api/clientes/:id', requireRole('Administrador'), async (req, res) => {
   try { await execute('UPDATE clientes SET activo = 0 WHERE id = ?', [req.params.id]); res.json({ success: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ==================== CRÉDITO Y PAGOS ====================
+app.get('/api/clientes/:id/credito', async (req, res) => {
+  try {
+    const [cliente] = await query('SELECT id, nombre, credito_activo, limite_credito FROM clientes WHERE id = ?', [req.params.id]);
+    if (!cliente) { return res.status(404).json({ error: 'Cliente no encontrado' }); }
+    const ventas = await query("SELECT id, folio, total, saldo_pendiente, created_at FROM ventas WHERE cliente_id = ? AND tipo_venta = 'Credito' AND estado != 'Cancelado'", [req.params.id]);
+    const pagos = await query("SELECT p.*, v.folio FROM pagos_credito p LEFT JOIN ventas v ON v.id = p.venta_id WHERE p.cliente_id = ? ORDER BY p.fecha_vencimiento ASC", [req.params.id]);
+    res.json({ cliente, ventas, pagos });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/ventas/:id/pagos', async (req, res) => {
+  try {
+    const p = await query("SELECT * FROM pagos_credito WHERE venta_id = ? ORDER BY numero_pago ASC", [req.params.id]);
+    res.json(p);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/pagos', requireRole('Administrador'), async (req, res) => {
+  try {
+    const { venta_id, cliente_id, pago_id, monto, metodo_pago } = req.body;
+    await execute("UPDATE pagos_credito SET estado = 'pagado', fecha_pago = ?, metodo_pago = ? WHERE id = ? AND venta_id = ?", [new Date().toISOString().slice(0,10), metodo_pago, pago_id, venta_id]);
+    const pendientes = await query("SELECT SUM(monto) as restante FROM pagos_credito WHERE venta_id = ? AND estado != 'pagado'", [venta_id]);
+    const saldo = pendientes[0]?.restante || 0;
+    if (saldo === 0) {
+      await execute("UPDATE ventas SET estado = 'Pagado', saldo_pendiente = 0 WHERE id = ?", [venta_id]);
+    } else {
+      await execute("UPDATE ventas SET saldo_pendiente = ? WHERE id = ?", [saldo, venta_id]);
+    }
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/pagos/alertas', async (req, res) => {
+  try {
+    const hoy = new Date().toISOString().slice(0,10);
+    const vencidos = await query("SELECT p.*, c.nombre as cliente_nombre, v.folio FROM pagos_credito p JOIN clientes c ON c.id = p.cliente_id JOIN ventas v ON v.id = p.venta_id WHERE p.estado = 'pendiente' AND p.fecha_vencimiento < ? ORDER BY p.fecha_vencimiento ASC", [hoy]);
+    const proximos = await query("SELECT p.*, c.nombre as cliente_nombre, v.folio FROM pagos_credito p JOIN clientes c ON c.id = p.cliente_id JOIN ventas v ON v.id = p.venta_id WHERE p.estado = 'pendiente' AND p.fecha_vencimiento >= ? AND p.fecha_vencimiento <= date(?, '+7 days') ORDER BY p.fecha_vencimiento ASC", [hoy, hoy]);
+    res.json({ vencidos, proximos });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==================== HERRAMIENTAS ====================
@@ -424,8 +466,59 @@ app.get('/api/biofabrica', async (req, res) => {
 app.post('/api/biofabrica', requireRole('Administrador'), async (req, res) => {
   try {
     const l = req.body;
-    await execute('INSERT INTO biofabrica_lotes (lote_id, producto, fecha_inicio, fecha_vencimiento, estado) VALUES (?,?,?,?,?)',
-      [l.lote_id, l.producto, l.fecha_inicio, l.fecha_vencimiento, l.estado || 'En proceso']);
+    await execute('INSERT INTO biofabrica_lotes (lote_id, producto, fecha_inicio, fecha_vencimiento, estado, cantidad_producida, cantidad_disponible, unidad, responsable, notas) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      [l.lote_id, l.producto, l.fecha_inicio, l.fecha_vencimiento, l.estado || 'En proceso', l.cantidad_producida || 0, l.cantidad_disponible || 0, l.unidad || 'litros', l.responsable || null, l.notas || null]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/biofabrica/:id', requireRole('Administrador'), async (req, res) => {
+  try {
+    const l = req.body;
+    await execute('UPDATE biofabrica_lotes SET producto=?, fecha_inicio=?, fecha_vencimiento=?, estado=?, cantidad_producida=?, cantidad_disponible=?, unidad=?, responsable=?, notas=? WHERE id=?',
+      [l.producto, l.fecha_inicio, l.fecha_vencimiento, l.estado, l.cantidad_producida || 0, l.cantidad_disponible || 0, l.unidad || 'litros', l.responsable || null, l.notas || null, req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/biofabrica/:id', requireRole('Administrador'), async (req, res) => {
+  try {
+    await execute('DELETE FROM aplicaciones_bioinsumo WHERE lote_id=?', [req.params.id]);
+    await execute('DELETE FROM biofabrica_lotes WHERE id=?', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ==================== APLICACIONES BIOINSUMO ====================
+app.get('/api/aplicaciones', async (req, res) => {
+  try {
+    const { lote_id, planta_id } = req.query;
+    let sql = 'SELECT a.*, l.lote_id as codigo_lote, l.producto as lote_producto, p.nombre as planta_nombre FROM aplicaciones_bioinsumo a LEFT JOIN biofabrica_lotes l ON a.lote_id = l.id LEFT JOIN plantas p ON a.planta_id = p.id WHERE 1=1';
+    const params = [];
+    if (lote_id) { sql += ' AND a.lote_id = ?'; params.push(lote_id); }
+    if (planta_id) { sql += ' AND a.planta_id = ?'; params.push(planta_id); }
+    sql += ' ORDER BY a.fecha_aplicacion DESC';
+    res.json(await query(sql, params));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/aplicaciones', requireRole('Administrador'), async (req, res) => {
+  try {
+    const a = req.body;
+    await execute('INSERT INTO aplicaciones_bioinsumo (lote_id, planta_id, cantidad_aplicada, fecha_aplicacion, responsable, notas) VALUES (?,?,?,?,?,?)',
+      [a.lote_id, a.planta_id, a.cantidad_aplicada, a.fecha_aplicacion, a.responsable || null, a.notas || null]);
+    await execute('UPDATE biofabrica_lotes SET cantidad_disponible = cantidad_disponible - ? WHERE id = ? AND cantidad_disponible >= ?', [a.cantidad_aplicada, a.lote_id, a.cantidad_aplicada]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/aplicaciones/:id', requireRole('Administrador'), async (req, res) => {
+  try {
+    const [appl] = await query('SELECT * FROM aplicaciones_bioinsumo WHERE id=?', [req.params.id]);
+    if (appl) {
+      await execute('UPDATE biofabrica_lotes SET cantidad_disponible = cantidad_disponible + ? WHERE id=?', [appl.cantidad_aplicada, appl.lote_id]);
+    }
+    await execute('DELETE FROM aplicaciones_bioinsumo WHERE id=?', [req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -534,6 +627,9 @@ app.get('/api/ventas/:id', async (req, res) => {
     `, [req.params.id]);
     if (!venta) return res.status(404).json({ error: 'Venta no encontrada' });
     venta.productos = await query('SELECT * FROM ventas_detalle WHERE venta_id = ?', [req.params.id]);
+    if (venta.tipo_venta === 'Credito') {
+      venta.pagos = await query('SELECT * FROM pagos_credito WHERE venta_id = ? ORDER BY numero_pago ASC', [req.params.id]);
+    }
     res.json(venta);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -574,6 +670,18 @@ app.post('/api/ventas', requireRole('Administrador', 'Vendedor'), async (req, re
       if (p.producto_tipo === 'planta') {
         await execute('UPDATE plantas SET stock = stock - ? WHERE id = ?', [p.cantidad, p.producto_id]);
         await execute("UPDATE inventario SET stock_actual = stock_actual - ? WHERE producto_tipo='planta' AND producto_id=?", [p.cantidad, p.producto_id]);
+      }
+    }
+
+    if (tv === 'Credito' && saldo > 0) {
+      const parcialidades = parseInt(req.body.parcialidades) || 2;
+      const frecuencia = req.body.frecuencia || 'semanal';
+      const montoPorPago = saldo / parcialidades;
+      for (let i = 1; i <= parcialidades; i++) {
+        const dias = frecuencia === 'semanal' ? i * 7 : i * 15;
+        const venc = new Date(Date.now() + dias * 86400000).toISOString().slice(0,10);
+        await execute('INSERT INTO pagos_credito (venta_id, cliente_id, numero_pago, monto, fecha_vencimiento, estado) VALUES (?,?,?,?,?,?)',
+          [ventaId, cliente_id, i, Math.round(montoPorPago * 100) / 100, venc, 'pendiente']);
       }
     }
 

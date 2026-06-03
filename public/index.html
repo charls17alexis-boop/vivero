@@ -319,6 +319,12 @@ tr:hover td { background: #faf9f7; }
         </div>
       </div>
 
+      <!-- Alertas de Pagos -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">&#x1F514; Alertas de Pagos</span></div>
+        <div class="card-body"><div id="pagos-alertas"></div></div>
+      </div>
+
       <!-- Costo vs Margen -->
       <div class="card">
         <div class="card-header"><span class="card-title">&#x1F4CA; Costo vs Margen (Últimos 6 meses)</span></div>
@@ -475,9 +481,16 @@ tr:hover td { background: #faf9f7; }
     <div class="card">
       <div class="card-body">
         <table>
-          <thead><tr><th>Lote ID</th><th>Producto</th><th>Inicio</th><th>Vencimiento</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Lote ID</th><th>Producto</th><th>Inicio</th><th>Vencimiento</th><th>Estado</th><th>Producido</th><th>Disponible</th><th>Unidad</th><th>Resp.</th><th>Acciones</th></tr></thead>
           <tbody id="tbody-biofabrica"></tbody>
         </table>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="card-header"><span class="card-title">Aplicaciones de Bioinsumos</span></div>
+      <div class="card-body">
+        <table><thead><tr><th>Lote</th><th>Planta</th><th>Cantidad</th><th>Fecha</th><th>Responsable</th><th>Notas</th><th>Acción</th></tr></thead><tbody id="tbody-aplicaciones"></tbody></table>
+        <div style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="modalAplicacion()">+ Nueva Aplicación</button></div>
       </div>
     </div>
   </div>
@@ -900,6 +913,28 @@ async function cargarDashboard() {
         }).join('')
       : '<div class="alert alert-green">&#x2705; Todos los productos con stock suficiente</div>';
 
+    try {
+      const pAlertas = await api('GET', '/api/pagos/alertas');
+      const paDiv = document.getElementById('pagos-alertas');
+      if (paDiv) {
+        let html = '';
+        if (pAlertas.vencidos.length) {
+          html += '<div style="margin-bottom:8px"><strong>Vencidos</strong></div>';
+          pAlertas.vencidos.forEach(p => {
+            html += `<div class="alert alert-red">&#x26A0;&#xFE0F; ${p.cliente_nombre} — Folio: ${p.folio} — $${fmt(p.monto)} — Vence: ${p.fecha_vencimiento}</div>`;
+          });
+        }
+        if (pAlertas.proximos.length) {
+          html += '<div style="margin-bottom:8px"><strong>Próximos 7 días</strong></div>';
+          pAlertas.proximos.forEach(p => {
+            html += `<div class="alert alert-yellow">&#x23F0; ${p.cliente_nombre} — Folio: ${p.folio} — $${fmt(p.monto)} — Vence: ${p.fecha_vencimiento}</div>`;
+          });
+        }
+        if (!html) html = '<div class="alert alert-green">&#x2705; Sin pagos pendientes</div>';
+        paDiv.innerHTML = html;
+      }
+    } catch (e) { /* pagos alertas no disponible */ }
+
     document.getElementById('fecha-hoy').textContent = new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   } catch (e) { showToast(e.message, 'error'); }
 
@@ -1206,6 +1241,7 @@ async function cargarClientes() {
         <td>${c.compras_totales}</td>
         <td><span class="badge ${c.saldo_actual > 0 ? 'badge-yellow' : 'badge-green'}">${c.saldo_actual > 0 ? '$' + c.saldo_actual + ' crédito' : 'Al corriente'}</span></td>
         <td class="actions">
+          ${c.credito_activo ? `<button class="btn btn-info btn-sm" onclick="modalCreditoCliente(${c.id})">&#x1F4B3;</button>` : ''}
           ${puedeEditar ? `<button class="btn btn-edit btn-sm" onclick='modalCliente(${JSON.stringify(c)})'>&#x270F;&#xFE0F;</button>` : ''}
           ${puedeEditar ? `<button class="btn btn-danger btn-sm" onclick="confirmarEliminar('cliente', ${c.id}, '${c.nombre}')">&#x1F5D1;</button>` : '<span style="color:var(--gris);font-size:11px">Solo lectura</span>'}
         </td>
@@ -1232,7 +1268,10 @@ function modalCliente(cliente) {
       <div class="form-group"><label>RFC</label><input type="text" id="f-rfc" value="${editando ? (cliente.rfc || '') : ''}"></div>
       <div class="form-group"><label>Límite crédito ($)</label><input type="number" id="f-credito" value="${editando ? (cliente.limite_credito || 0) : '0'}"></div>
     </div>
-    <div class="form-group"><label>Dirección</label><input type="text" id="f-dir" value="${editando ? (cliente.direccion || '') : ''}"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Dirección</label><input type="text" id="f-dir" value="${editando ? (cliente.direccion || '') : ''}"></div>
+      <div class="form-group"><label><input type="checkbox" id="f-credito-activo" ${editando && cliente.credito_activo ? 'checked' : ''}> Crédito activo</label></div>
+    </div>
   `;
 
   document.getElementById('modal-save-btn').onclick = async () => {
@@ -1243,7 +1282,8 @@ function modalCliente(cliente) {
       email: document.getElementById('f-email').value || null,
       rfc: document.getElementById('f-rfc').value || null,
       limite_credito: parseFloat(document.getElementById('f-credito').value) || 0,
-      direccion: document.getElementById('f-dir').value || null
+      direccion: document.getElementById('f-dir').value || null,
+      credito_activo: document.getElementById('f-credito-activo').checked ? 1 : 0
     };
     try {
       if (editando) {
@@ -1303,15 +1343,21 @@ function modalVenta() {
               <button class="btn btn-outline btn-sm" onclick="modalClienteRapido()" title="Crear cliente nuevo">+</button>
             </div>
           </div>
-          <div class="form-group"><label>Método pago</label><select id="f-pago"><option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option><option>Crédito</option></select></div>
+          <div class="form-group"><label>Método pago</label><select id="f-pago" onchange="toggleMetodoPago()"><option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option><option>Crédito</option></select></div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label>Tipo de venta</label><select id="f-tipo-venta" onchange="toggleTipoVenta()"><option value="Normal">Normal (pago completo)</option><option value="Anticipo">Anticipo / Apartado</option></select></div>
+          <div class="form-group"><label>Tipo de venta</label><select id="f-tipo-venta" onchange="toggleTipoVenta()"><option value="Normal">Normal (pago completo)</option><option value="Anticipo">Anticipo / Apartado</option><option value="Credito">Crédito</option></select></div>
           <div class="form-group"><label>Fecha programada</label><input type="date" id="f-fecha-programada"></div>
         </div>
         <div id="anticipo-fields" style="display:none">
           <div class="form-row">
             <div class="form-group"><label>Anticipo \$</label><input type="number" id="f-anticipo" placeholder="0" min="0" value="0" step="0.01"></div>
+          </div>
+        </div>
+        <div id="credito-fields" style="display:none">
+          <div class="form-row">
+            <div class="form-group"><label>Parcialidades</label><select id="f-parcialidades"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="6">6</option></select></div>
+            <div class="form-group"><label>Frecuencia</label><select id="f-frecuencia"><option value="semanal">Semanal</option><option value="quincenal">Quincenal</option></select></div>
           </div>
         </div>
         <div class="form-group"><label>Productos</label>
@@ -1362,18 +1408,24 @@ function modalVenta() {
     if (prods.length === 0) return showToast('Agregue al menos un producto', 'error');
 
     const tipoVenta = document.getElementById('f-tipo-venta').value;
-    const anticipoVal = tipoVenta !== 'Normal' ? parseFloat(document.getElementById('f-anticipo').value) || 0 : 0;
+    const anticipoVal = tipoVenta === 'Anticipo' ? parseFloat(document.getElementById('f-anticipo').value) || 0 : 0;
+
+    const body = {
+      cliente_id: parseInt(document.getElementById('f-cliente').value) || null,
+      metodo_pago: document.getElementById('f-pago').value,
+      productos: prods,
+      usuario_id: SESSION.id,
+      tipo_venta: tipoVenta,
+      anticipo: anticipoVal,
+      fecha_programada: document.getElementById('f-fecha-programada').value || null
+    };
+    if (tipoVenta === 'Credito') {
+      body.parcialidades = parseInt(document.getElementById('f-parcialidades').value) || 4;
+      body.frecuencia = document.getElementById('f-frecuencia').value;
+    }
 
     try {
-      const res = await api('POST', '/api/ventas', {
-        cliente_id: parseInt(document.getElementById('f-cliente').value) || null,
-        metodo_pago: document.getElementById('f-pago').value,
-        productos: prods,
-        usuario_id: SESSION.id,
-        tipo_venta: tipoVenta,
-        anticipo: anticipoVal,
-        fecha_programada: document.getElementById('f-fecha-programada').value || null
-      });
+      const res = await api('POST', '/api/ventas', body);
       cerrarModal();
       showToast('Venta registrada — Folio: ' + res.folio);
       mostrarTicket(res.id, res.ticket_number);
@@ -1386,7 +1438,16 @@ function modalVenta() {
 
 function toggleTipoVenta() {
   const tv = document.getElementById('f-tipo-venta').value;
-  document.getElementById('anticipo-fields').style.display = tv === 'Normal' ? 'none' : 'block';
+  document.getElementById('anticipo-fields').style.display = tv === 'Anticipo' ? 'block' : 'none';
+  document.getElementById('credito-fields').style.display = tv === 'Credito' ? 'block' : 'none';
+}
+
+function toggleMetodoPago() {
+  const mp = document.getElementById('f-pago').value;
+  if (mp === 'Crédito') {
+    document.getElementById('f-tipo-venta').value = 'Credito';
+    toggleTipoVenta();
+  }
 }
 
 function modalClienteRapido() {
@@ -1424,6 +1485,16 @@ function verDetalleVenta(id, folio) {
       <tr><td>Anticipo</td><td>$${fmt(v.anticipo)}</td></tr>
       <tr><td>Saldo pendiente</td><td><strong>$${fmt(v.saldo_pendiente)}</strong></td></tr>`;
     const fp = v.fecha_programada ? `<tr><td>Fecha prog.</td><td>${v.fecha_programada}</td></tr>` : '';
+    const pagosHtml = (v.pagos && v.pagos.length) ? `
+      <h4 style="margin:16px 0 8px">Pagos (${v.tipo_venta})</h4>
+      <table style="width:100%;font-size:13px">
+        <thead><tr><th>#</th><th>Monto</th><th>Vencimiento</th><th>Fecha pago</th><th>Estado</th><th>Acción</th></tr></thead>
+        <tbody>${v.pagos.map(p => {
+          const cls = p.estado === 'pagado' ? 'badge-green' : p.estado === 'vencido' ? 'badge-red' : 'badge-yellow';
+          const pagoBtn = p.estado === 'pendiente' ? `<button class="btn btn-primary btn-sm" onclick="registrarPagoCredito(${v.id},${v.cliente_id},${p.id},${p.monto})">&#x2714;</button>` : `<span style="font-size:11px;color:var(--gris)">${p.estado === 'pagado' ? 'Pagado' : 'Vencido'}</span>`;
+          return `<tr><td>${p.numero_pago}</td><td>$${fmt(p.monto)}</td><td>${p.fecha_vencimiento}</td><td>${p.fecha_pago || '—'}</td><td><span class="badge ${cls}">${p.estado}</span></td><td>${pagoBtn}</td></tr>`;
+        }).join('')}</tbody>
+      </table>` : '';
     document.getElementById('modal-body').innerHTML = `
       <table style="width:100%;font-size:13px">
         <tr><td style="color:var(--gris);width:100px">Folio</td><td><strong>${v.folio}</strong></td></tr>
@@ -1441,7 +1512,8 @@ function verDetalleVenta(id, folio) {
         <thead><tr><th>Producto</th><th>Cant</th><th>Precio</th><th>Subtotal</th></tr></thead>
         <tbody>${(v.productos || []).map(p => `<tr><td>${p.producto_nombre}</td><td>${p.cantidad}</td><td>$${fmt(p.precio_unitario)}</td><td>$${fmt(p.subtotal)}</td></tr>`).join('')}</tbody>
       </table>
-      ${v.saldo_pendiente > 0 ? `<div style="margin-top:16px"><button class="btn btn-primary" onclick="registrarAbono(${v.id})">+ Registrar abono</button></div>` : ''}
+      ${pagosHtml}
+      ${v.saldo_pendiente > 0 && v.tipo_venta !== 'Credito' ? `<div style="margin-top:16px"><button class="btn btn-primary" onclick="registrarAbono(${v.id})">+ Registrar abono</button></div>` : ''}
     `;
   });
   abrirModal();
@@ -1455,6 +1527,45 @@ function registrarAbono(ventaId) {
     cerrarModal();
     cargarVentas();
   }).catch(e => showToast(e.message, 'error'));
+}
+
+function registrarPagoCredito(ventaId, clienteId, pagoId, monto) {
+  const metodo = prompt('Método de pago (Efectivo/Tarjeta/Transferencia):');
+  if (!metodo) return;
+  api('POST', '/api/pagos', { venta_id: ventaId, cliente_id: clienteId, pago_id: pagoId, monto, metodo_pago: metodo }).then(r => {
+    showToast('Pago registrado');
+    cerrarModal();
+    cargarVentas();
+  }).catch(e => showToast(e.message, 'error'));
+}
+
+function modalCreditoCliente(clienteId) {
+  document.getElementById('modal-title').textContent = 'Crédito del Cliente';
+  api('GET', '/api/clientes/' + clienteId + '/credito').then(d => {
+    let html = `
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+        <div class="stat-card"><div class="label">Cliente</div><div class="value" style="font-size:15px">${d.cliente.nombre}</div></div>
+        <div class="stat-card"><div class="label">Límite crédito</div><div class="value" style="font-size:15px">$${fmt(d.cliente.limite_credito)}</div></div>
+        <div class="stat-card"><div class="label">Estado</div><div class="value" style="font-size:15px">${d.cliente.credito_activo ? '<span class="badge badge-green">Activo</span>' : '<span class="badge badge-red">Inactivo</span>'}</div></div>
+      </div>
+      <h4 style="margin:12px 0 8px">Ventas a crédito</h4>
+      <table style="width:100%;font-size:13px">
+        <thead><tr><th>Folio</th><th>Total</th><th>Saldo</th><th>Fecha</th></tr></thead>
+        <tbody>${d.ventas.length ? d.ventas.map(v => `<tr><td>${v.folio}</td><td>$${fmt(v.total)}</td><td>$${fmt(v.saldo_pendiente)}</td><td>${v.created_at || ''}</td></tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--gris)">Sin ventas a crédito</td></tr>'}</tbody>
+      </table>
+      <h4 style="margin:12px 0 8px">Historial de Pagos</h4>
+      <table style="width:100%;font-size:13px">
+        <thead><tr><th>Folio</th><th>#Pago</th><th>Monto</th><th>Vence</th><th>Pagado</th><th>Estado</th></tr></thead>
+        <tbody>${d.pagos.length ? d.pagos.map(p => {
+          const cls = p.estado === 'pagado' ? 'badge-green' : p.estado === 'vencido' ? 'badge-red' : 'badge-yellow';
+          return `<tr><td>${p.folio || ''}</td><td>${p.numero_pago}</td><td>$${fmt(p.monto)}</td><td>${p.fecha_vencimiento}</td><td>${p.fecha_pago || '—'}</td><td><span class="badge ${cls}">${p.estado}</span></td></tr>`;
+        }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--gris)">Sin pagos registrados</td></tr>'}</tbody>
+      </table>
+    `;
+    document.getElementById('modal-body').innerHTML = html;
+    document.getElementById('modal-actions').innerHTML = '<button class="btn btn-outline" onclick="cerrarModal()">Cerrar</button>';
+  });
+  abrirModal();
 }
 
 function agregarProductoVenta() {
@@ -1680,6 +1791,7 @@ function modalEmpleado(emp) {
 async function cargarBiofabrica() {
   try {
     const data = await api('GET', '/api/biofabrica');
+    const puedeEditar = SESSION && SESSION.rol === 'Administrador';
     document.getElementById('tbody-biofabrica').innerHTML = data.map(l => {
       const cls = l.estado === 'Listo' ? 'badge-green' : l.estado === 'Por vencer' ? 'badge-yellow' : 'badge-blue';
       return `<tr>
@@ -1688,7 +1800,14 @@ async function cargarBiofabrica() {
         <td>${l.fecha_inicio}</td>
         <td>${l.fecha_vencimiento}</td>
         <td><span class="badge ${cls}">${l.estado}</span></td>
-        <td><button class="btn btn-edit btn-sm" onclick="showToast('Detalle de ${l.lote_id}')">&#x1F441;&#xFE0F; Ver</button></td>
+        <td>${l.cantidad_producida || 0}</td>
+        <td>${l.cantidad_disponible || 0}</td>
+        <td>${l.unidad || 'litros'}</td>
+        <td>${l.responsable || '—'}</td>
+        <td class="actions">
+          <button class="btn btn-edit btn-sm" onclick="modalLote(${l.id})">&#x270F;&#xFE0F;</button>
+          ${puedeEditar ? `<button class="btn btn-danger btn-sm" onclick="confirmarEliminarLote(${l.id})">&#x1F5D1;</button>` : ''}
+        </td>
       </tr>`;
     }).join('');
 
@@ -1697,30 +1816,103 @@ async function cargarBiofabrica() {
       <div class="stat-card info"><div class="label">En proceso</div><div class="value">${data.filter(l => l.estado === 'En proceso').length}</div></div>
       <div class="stat-card warn"><div class="label">Por vencer</div><div class="value">${data.filter(l => l.estado === 'Por vencer').length}</div></div>
     `;
+
+    const aplicaciones = await api('GET', '/api/aplicaciones');
+    document.getElementById('tbody-aplicaciones').innerHTML = aplicaciones.map(a =>
+      `<tr><td>${a.codigo_lote || ''} - ${a.lote_producto || ''}</td><td>${a.planta_nombre || ''}</td><td>${a.cantidad_aplicada} ${a.lote_producto ? '' : ''}</td><td>${a.fecha_aplicacion}</td><td>${a.responsable || '—'}</td><td>${a.notas || '—'}</td>
+      <td>${puedeEditar ? `<button class="btn btn-danger btn-sm" onclick="confirmarEliminarAplicacion(${a.id})">&#x1F5D1;</button>` : ''}</td></tr>`
+    ).join('');
   } catch (e) { showToast(e.message, 'error'); }
 }
 
-function modalLote() {
-  document.getElementById('modal-title').textContent = 'Nuevo Lote';
+function modalLote(lote) {
+  const editando = !!lote;
+  document.getElementById('modal-title').textContent = editando ? 'Editar Lote' : 'Nuevo Lote';
   document.getElementById('modal-body').innerHTML = `
     <div class="form-row">
-      <div class="form-group"><label>ID Lote</label><input type="text" id="f-lote-id" placeholder="L-2024-XXX"></div>
-      <div class="form-group"><label>Producto</label><input type="text" id="f-producto" placeholder="Ej: Trichoderma"></div>
+      <div class="form-group"><label>ID Lote</label><input type="text" id="f-lote-id" ${editando ? `value="${lote.lote_id}"` : 'placeholder="L-2024-XXX"'} ${editando ? 'disabled' : ''}></div>
+      <div class="form-group"><label>Producto</label><input type="text" id="f-producto" value="${editando ? lote.producto : ''}" placeholder="Ej: Trichoderma"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Fecha inicio</label><input type="date" id="f-inicio"></div>
-      <div class="form-group"><label>Fecha vencimiento</label><input type="date" id="f-venc"></div>
+      <div class="form-group"><label>Fecha inicio</label><input type="date" id="f-inicio" value="${editando ? lote.fecha_inicio : ''}"></div>
+      <div class="form-group"><label>Fecha vencimiento</label><input type="date" id="f-venc" value="${editando ? lote.fecha_vencimiento : ''}"></div>
     </div>
+    <div class="form-row">
+      <div class="form-group"><label>Cant. producida</label><input type="number" id="f-cant-prod" value="${editando ? lote.cantidad_producida || 0 : 0}" min="0" step="0.1"></div>
+      <div class="form-group"><label>Cant. disponible</label><input type="number" id="f-cant-disp" value="${editando ? lote.cantidad_disponible || 0 : 0}" min="0" step="0.1"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Unidad</label><select id="f-unidad"><option ${editando && lote.unidad === 'litros' ? 'selected' : ''}>litros</option><option ${editando && lote.unidad === 'kg' ? 'selected' : ''}>kg</option><option ${editando && lote.unidad === 'unidades' ? 'selected' : ''}>unidades</option></select></div>
+      <div class="form-group"><label>Estado</label><select id="f-estado"><option ${editando && lote.estado === 'En proceso' ? 'selected' : ''}>En proceso</option><option ${editando && lote.estado === 'Listo' ? 'selected' : ''}>Listo</option><option ${editando && lote.estado === 'Por vencer' ? 'selected' : ''}>Por vencer</option></select></div>
+    </div>
+    <div class="form-group"><label>Responsable</label><input type="text" id="f-responsable" value="${editando ? (lote.responsable || '') : ''}"></div>
+    <div class="form-group"><label>Notas</label><textarea id="f-notas" style="width:100%;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px">${editando ? (lote.notas || '') : ''}</textarea></div>
   `;
   document.getElementById('modal-save-btn').onclick = async () => {
+    const body = {
+      lote_id: document.getElementById('f-lote-id').value,
+      producto: document.getElementById('f-producto').value,
+      fecha_inicio: document.getElementById('f-inicio').value,
+      fecha_vencimiento: document.getElementById('f-venc').value,
+      cantidad_producida: parseFloat(document.getElementById('f-cant-prod').value) || 0,
+      cantidad_disponible: parseFloat(document.getElementById('f-cant-disp').value) || 0,
+      unidad: document.getElementById('f-unidad').value,
+      estado: document.getElementById('f-estado').value,
+      responsable: document.getElementById('f-responsable').value || null,
+      notas: document.getElementById('f-notas').value || null
+    };
     try {
-      await api('POST', '/api/biofabrica', {
-        lote_id: document.getElementById('f-lote-id').value,
-        producto: document.getElementById('f-producto').value,
-        fecha_inicio: document.getElementById('f-inicio').value,
-        fecha_vencimiento: document.getElementById('f-venc').value
+      if (editando) {
+        await api('PUT', '/api/biofabrica/' + lote.id, body);
+      } else {
+        await api('POST', '/api/biofabrica', body);
+      }
+      cerrarModal(); showToast(editando ? 'Lote actualizado' : 'Lote registrado');
+      cargarBiofabrica();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+  abrirModal();
+}
+
+function confirmarEliminarLote(id) {
+  if (!confirm('¿Eliminar lote? También se eliminarán sus aplicaciones.')) return;
+  api('DELETE', '/api/biofabrica/' + id).then(() => { showToast('Lote eliminado'); cargarBiofabrica(); }).catch(e => showToast(e.message, 'error'));
+}
+
+function confirmarEliminarAplicacion(id) {
+  if (!confirm('¿Eliminar aplicación?')) return;
+  api('DELETE', '/api/aplicaciones/' + id).then(() => { showToast('Aplicación eliminada'); cargarBiofabrica(); }).catch(e => showToast(e.message, 'error'));
+}
+
+function modalAplicacion() {
+  document.getElementById('modal-title').textContent = 'Nueva Aplicación';
+  api('GET', '/api/biofabrica').then(lotes => {
+    api('GET', '/api/plantas').then(plantas => {
+      document.getElementById('modal-body').innerHTML = `
+        <div class="form-row">
+          <div class="form-group"><label>Lote</label><select id="f-apl-lote">${lotes.filter(l => l.cantidad_disponible > 0).map(l => `<option value="${l.id}">${l.lote_id} — ${l.producto} (disp: ${l.cantidad_disponible} ${l.unidad})</option>`).join('')}</select></div>
+          <div class="form-group"><label>Planta</label><select id="f-apl-planta">${plantas.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('')}</select></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Cantidad</label><input type="number" id="f-apl-cant" value="1" min="0.1" step="0.1"></div>
+          <div class="form-group"><label>Fecha</label><input type="date" id="f-apl-fecha" value="${new Date().toISOString().slice(0,10)}"></div>
+        </div>
+        <div class="form-group"><label>Responsable</label><input type="text" id="f-apl-responsable" placeholder="Nombre del aplicador"></div>
+        <div class="form-group"><label>Notas</label><textarea id="f-apl-notas" style="width:100%;padding:8px;border:1px solid var(--gris-claro);border-radius:7px;font-size:13px"></textarea></div>
+      `;
+    });
+  });
+  document.getElementById('modal-save-btn').onclick = async () => {
+    try {
+      await api('POST', '/api/aplicaciones', {
+        lote_id: parseInt(document.getElementById('f-apl-lote').value),
+        planta_id: parseInt(document.getElementById('f-apl-planta').value),
+        cantidad_aplicada: parseFloat(document.getElementById('f-apl-cant').value) || 1,
+        fecha_aplicacion: document.getElementById('f-apl-fecha').value,
+        responsable: document.getElementById('f-apl-responsable').value || null,
+        notas: document.getElementById('f-apl-notas').value || null
       });
-      cerrarModal(); showToast('Lote registrado');
+      cerrarModal(); showToast('Aplicación registrada');
       cargarBiofabrica();
     } catch (e) { showToast(e.message, 'error'); }
   };

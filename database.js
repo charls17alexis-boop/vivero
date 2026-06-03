@@ -147,6 +147,23 @@ if (!DATABASE_URL) {
       calificacion INTEGER NOT NULL DEFAULT 5, observaciones TEXT,
       created_at TEXT DEFAULT (datetime('now','localtime'))
     );
+    CREATE TABLE IF NOT EXISTS pagos_credito (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, venta_id INTEGER NOT NULL,
+      cliente_id INTEGER NOT NULL, numero_pago INTEGER NOT NULL,
+      monto REAL NOT NULL DEFAULT 0, fecha_vencimiento TEXT NOT NULL,
+      fecha_pago TEXT, estado TEXT NOT NULL DEFAULT 'pendiente',
+      metodo_pago TEXT, created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE,
+      FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+    );
+    CREATE TABLE IF NOT EXISTS aplicaciones_bioinsumo (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, lote_id INTEGER NOT NULL,
+      planta_id INTEGER NOT NULL, cantidad_aplicada REAL NOT NULL DEFAULT 0,
+      fecha_aplicacion TEXT NOT NULL, responsable TEXT, notas TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (lote_id) REFERENCES biofabrica_lotes(id) ON DELETE CASCADE,
+      FOREIGN KEY (planta_id) REFERENCES plantas(id)
+    );
     CREATE TABLE IF NOT EXISTS adquisicion_plantas (
       id INTEGER PRIMARY KEY AUTOINCREMENT, folio TEXT UNIQUE NOT NULL,
       proveedor TEXT NOT NULL, fecha_adquisicion TEXT NOT NULL, total REAL NOT NULL DEFAULT 0,
@@ -204,6 +221,12 @@ if (!DATABASE_URL) {
       'ALTER TABLE plantas ADD COLUMN tiempo_crecimiento TEXT',
     'ALTER TABLE plantas ADD COLUMN dificultad TEXT DEFAULT \'Fácil\'',
     'ALTER TABLE plantas ADD COLUMN costo_adquisicion REAL DEFAULT 0',
+    'ALTER TABLE clientes ADD COLUMN credito_activo INTEGER DEFAULT 0',
+    'ALTER TABLE biofabrica_lotes ADD COLUMN cantidad_producida REAL DEFAULT 0',
+    'ALTER TABLE biofabrica_lotes ADD COLUMN cantidad_disponible REAL DEFAULT 0',
+    'ALTER TABLE biofabrica_lotes ADD COLUMN unidad TEXT DEFAULT \'litros\'',
+    'ALTER TABLE biofabrica_lotes ADD COLUMN responsable TEXT',
+    'ALTER TABLE biofabrica_lotes ADD COLUMN notas TEXT',
   ];
   migrations.forEach(m => { try { db.exec(m); } catch (e) { /* ya existe */ } });
     await seedData();
@@ -430,6 +453,19 @@ const SCHEMA_SQL = `
     calificacion INTEGER NOT NULL DEFAULT 5, observaciones TEXT,
     created_at TIMESTAMP DEFAULT NOW()
   );
+  CREATE TABLE IF NOT EXISTS pagos_credito (
+    id SERIAL PRIMARY KEY, venta_id INTEGER NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
+    cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+    numero_pago INTEGER NOT NULL, monto REAL NOT NULL DEFAULT 0,
+    fecha_vencimiento TEXT NOT NULL, fecha_pago TEXT, estado TEXT NOT NULL DEFAULT 'pendiente',
+    metodo_pago TEXT, created_at TIMESTAMP DEFAULT NOW()
+  );
+  CREATE TABLE IF NOT EXISTS aplicaciones_bioinsumo (
+    id SERIAL PRIMARY KEY, lote_id INTEGER NOT NULL REFERENCES biofabrica_lotes(id) ON DELETE CASCADE,
+    planta_id INTEGER NOT NULL REFERENCES plantas(id),
+    cantidad_aplicada REAL NOT NULL DEFAULT 0, fecha_aplicacion TEXT NOT NULL,
+    responsable TEXT, notas TEXT, created_at TIMESTAMP DEFAULT NOW()
+  );
   CREATE TABLE IF NOT EXISTS adquisicion_plantas (
     id SERIAL PRIMARY KEY, folio TEXT UNIQUE NOT NULL,
     proveedor TEXT NOT NULL, fecha_adquisicion TEXT NOT NULL, total REAL NOT NULL DEFAULT 0,
@@ -481,6 +517,12 @@ async function pgMigrate() {
     'ALTER TABLE plantas ADD COLUMN IF NOT EXISTS tiempo_crecimiento TEXT',
     'ALTER TABLE plantas ADD COLUMN IF NOT EXISTS dificultad TEXT DEFAULT \'Fácil\'',
     'ALTER TABLE plantas ADD COLUMN IF NOT EXISTS costo_adquisicion REAL DEFAULT 0',
+    'ALTER TABLE clientes ADD COLUMN IF NOT EXISTS credito_activo INTEGER DEFAULT 0',
+    'ALTER TABLE biofabrica_lotes ADD COLUMN IF NOT EXISTS cantidad_producida REAL DEFAULT 0',
+    'ALTER TABLE biofabrica_lotes ADD COLUMN IF NOT EXISTS cantidad_disponible REAL DEFAULT 0',
+    'ALTER TABLE biofabrica_lotes ADD COLUMN IF NOT EXISTS unidad TEXT DEFAULT \'litros\'',
+    'ALTER TABLE biofabrica_lotes ADD COLUMN IF NOT EXISTS responsable TEXT',
+    'ALTER TABLE biofabrica_lotes ADD COLUMN IF NOT EXISTS notas TEXT',
   ];
   for (const m of migrations) {
     try { await pool.query(m); } catch (e) { /* ignorar */ }
