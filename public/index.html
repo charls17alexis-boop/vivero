@@ -133,6 +133,8 @@ tr:hover td { background: #faf9f7; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 
+.datepicker-input { padding: 8px; border: 1px solid var(--gris-claro); border-radius: 7px; font-size: 13px; font-family: inherit; background: #fff; min-width: 140px; cursor: pointer; }
+.datepicker-input:focus { outline: none; border-color: var(--verde); box-shadow: 0 0 0 2px rgba(45,106,79,0.15); }
 .alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; display: flex; align-items: center; gap: 10px; }
 .alert-red { background: var(--rojo-suave); color: var(--rojo); border-left: 4px solid var(--rojo); }
 .alert-yellow { background: var(--amarillo-suave); color: #856404; border-left: 4px solid var(--amarillo); }
@@ -536,10 +538,23 @@ tr:hover td { background: #faf9f7; }
   <!-- REPORTES -->
   <div class="page" id="page-reportes">
     <div class="page-header">
-      <div><div class="page-title">Reportes</div><div class="page-subtitle">Estadísticas y análisis</div></div>
+      <div><div class="page-title">Reportes</div><div class="page-subtitle" id="reportes-subtitle">Estadísticas y análisis</div></div>
       <div class="search-bar" style="gap:6px">
         <button class="btn btn-primary" onclick="generarPDF()">&#x1F4C4; Exportar PDF</button>
         <button class="btn btn-primary" onclick="exportarExcel()" style="background:var(--verde)">&#x1F4D1; Exportar Excel</button>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-body">
+        <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+          <div class="form-group" style="margin:0"><label>Fecha inicio</label><input type="date" id="f-reporte-inicio" class="datepicker-input"></div>
+          <div class="form-group" style="margin:0"><label>Fecha fin</label><input type="date" id="f-reporte-fin" class="datepicker-input"></div>
+          <button class="btn btn-primary btn-sm" onclick="aplicarFiltroReportes()">&#x1F50D; Filtrar</button>
+          <button class="btn btn-outline btn-sm" onclick="filtroReportesRapido('hoy')">Hoy</button>
+          <button class="btn btn-outline btn-sm" onclick="filtroReportesRapido('semana')">Esta semana</button>
+          <button class="btn btn-outline btn-sm" onclick="filtroReportesRapido('mes')">Este mes</button>
+          <button class="btn btn-outline btn-sm" onclick="filtroReportesRapido('trimestre')">Últimos 3 meses</button>
+        </div>
       </div>
     </div>
     <div class="stats-grid" id="reportes-stats"></div>
@@ -552,6 +567,20 @@ tr:hover td { background: #faf9f7; }
         <div class="card-header"><span class="card-title">Top productos</span></div>
         <div class="card-body-pad"><div id="top-productos"></div></div>
       </div>
+    </div>
+    <div class="grid-2" style="margin-top:12px">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Adquisiciones</span></div>
+        <div class="card-body"><div id="reportes-adquisiciones"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Costos de Operación</span></div>
+        <div class="card-body"><div id="reportes-costos"></div></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="card-header"><span class="card-title">Control de Calidad</span></div>
+      <div class="card-body"><div id="reportes-calidad"></div></div>
     </div>
   </div>
 
@@ -2186,35 +2215,79 @@ function generarReporteCalidad(id) {
 
 // ============ REPORTES ============
 async function cargarReportes() {
+  document.getElementById('f-reporte-inicio').value = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+  document.getElementById('f-reporte-fin').value = new Date().toISOString().slice(0,10);
+  await cargarReportesConFechas();
+}
+
+async function cargarReportesConFechas() {
   try {
-    const d = await api('GET', '/api/dashboard');
+    const fi = document.getElementById('f-reporte-inicio').value;
+    const ff = document.getElementById('f-reporte-fin').value;
+    const d = await api('GET', '/api/reportes?fecha_inicio=' + fi + '&fecha_fin=' + ff);
+
+    const fmtFecha = (s) => { const d2 = new Date(s + 'T12:00:00'); return d2.toLocaleDateString('es-MX', { day: 'numeric', month: 'long' }); };
+    const fiLabel = fmtFecha(fi);
+    const ffLabel = fmtFecha(ff);
+    document.getElementById('reportes-subtitle').textContent = fiLabel + ' al ' + ffLabel;
+
+    const totalVentas = d.totalVentas || 0;
+    const totalCostosOp = d.totalCostosOp || 0;
     document.getElementById('reportes-stats').innerHTML = `
-      <div class="stat-card info"><div class="label">Ingresos del mes</div><div class="value">$${fmt(d.ventasMes)}</div><div class="change">${d.ventasMesAnt > 0 ? ((d.ventasMes - d.ventasMesAnt) / d.ventasMesAnt * 100).toFixed(0) + '% respecto al mes anterior' : ''}</div></div>
-      <div class="stat-card"><div class="label">Unidades vendidas</div><div class="value">${d.topProductos.reduce((a, b) => a + (b.total || 0), 0)}</div><div class="change">Total del mes</div></div>
-      <div class="stat-card"><div class="label">Clientes nuevos</div><div class="value">${d.clientesNuevosMes}</div><div class="change">Total: ${d.clientesActivos} clientes</div></div>
-      <div class="stat-card warn"><div class="label">Gastos operativos</div><div class="value">$${fmt(d.gastosOperativos)}</div><div class="change">Margen: ${d.ventasMes > 0 ? Math.round((1 - d.gastosOperativos / d.ventasMes) * 100) : 0}%</div></div>
+      <div class="stat-card info"><div class="label">Ingresos del período</div><div class="value">$${fmt(totalVentas)}</div></div>
+      <div class="stat-card"><div class="label">Ventas registradas</div><div class="value">${d.ventas.length}</div><div class="change">Total transacciones</div></div>
+      <div class="stat-card"><div class="label">Costos operativos</div><div class="value">$${fmt(totalCostosOp)}</div><div class="change">Del período</div></div>
+      <div class="stat-card warn"><div class="label">Adquisiciones</div><div class="value">${d.adquisiciones.length}</div><div class="change">Órdenes en el período</div></div>
     `;
 
-    document.getElementById('ventas-semana').innerHTML = d.ventasSemana.length
-      ? d.ventasSemana.map(s => {
-          const max = Math.max(...d.ventasSemana.map(x => x.total));
-          const pct = max > 0 ? (s.total / max * 100) : 0;
-          return `<div class="chart-bar-row"><div class="chart-bar-label">Semana ${s.semana}</div><div class="chart-bar-track"><div class="chart-bar-fill" style="width:${pct}%"></div></div><div class="chart-bar-val">$${fmt(s.total)}</div></div>`;
-        }).join('')
-      : '<div class="empty-state">Sin datos este mes</div>';
+    document.getElementById('ventas-semana').innerHTML = d.ventas.length
+      ? '<div style="padding:12px">' + d.ventas.slice(0,10).map(v =>
+          `<div class="chart-bar-row"><div class="chart-bar-label">${v.folio || ''}</div><div class="chart-bar-track"><div class="chart-bar-fill" style="width:${Math.min(100, (v.total / Math.max(...d.ventas.slice(0,10).map(x => x.total))) * 100)}%"></div></div><div class="chart-bar-val">$${fmt(v.total)}</div></div>`
+        ).join('') + '</div>'
+      : '<div class="empty-state">Sin ventas en el período</div>';
 
-    document.getElementById('top-productos').innerHTML = d.topProductos.length
-      ? d.topProductos.map(p => {
-          const max = Math.max(...d.topProductos.map(x => x.total));
-          const pct = max > 0 ? (p.total / max * 100) : 0;
-          return `<div class="chart-bar-row"><div class="chart-bar-label">${p.nombre}</div><div class="chart-bar-track"><div class="chart-bar-fill" style="width:${pct}%"></div></div><div class="chart-bar-val">${p.total} uds</div></div>`;
-        }).join('')
-      : '<div class="empty-state">Sin ventas este mes</div>';
+    document.getElementById('top-productos').innerHTML = d.ventas.length
+      ? (() => {
+          const conteo = {};
+          d.ventas.forEach(v => { if (v.productos) v.productos.forEach(p => { conteo[p.producto_nombre] = (conteo[p.producto_nombre] || 0) + p.cantidad; }); });
+          const top = Object.entries(conteo).sort((a, b) => b[1] - a[1]).slice(0, 5);
+          return top.length ? top.map(([nombre, total], i) => {
+            const max = Math.max(...top.map(x => x[1]));
+            const pct = max > 0 ? (total / max * 100) : 0;
+            return `<div class="chart-bar-row"><div class="chart-bar-label">${nombre}</div><div class="chart-bar-track"><div class="chart-bar-fill" style="width:${pct}%"></div></div><div class="chart-bar-val">${total} uds</div></div>`;
+          }).join('') : '<div class="empty-state">Sin datos</div>';
+        })()
+      : '<div class="empty-state">Sin ventas en el período</div>';
+
+    // Adquisiciones
+    document.getElementById('reportes-adquisiciones').innerHTML = d.adquisiciones.length
+      ? '<table style="width:100%;font-size:12px"><thead><tr><th>Folio</th><th>Proveedor</th><th>Total</th><th>Fecha</th></tr></thead><tbody>' +
+        d.adquisiciones.slice(0,8).map(a => `<tr><td>${a.folio}</td><td>${a.proveedor}</td><td>$${fmt(a.total)}</td><td>${a.fecha_adquisicion}</td></tr>`).join('') +
+        '</tbody></table>'
+      : '<div class="empty-state">Sin adquisiciones en el período</div>';
+
+    // Costos
+    document.getElementById('reportes-costos').innerHTML = d.costos.length
+      ? '<table style="width:100%;font-size:12px"><thead><tr><th>Concepto</th><th>Tipo</th><th>Monto</th><th>Fecha</th></tr></thead><tbody>' +
+        d.costos.slice(0,8).map(c => `<tr><td>${c.concepto}</td><td>${c.tipo}</td><td>$${fmt(c.monto)}</td><td>${c.fecha}</td></tr>`).join('') +
+        '</tbody></table>'
+      : '<div class="empty-state">Sin costos en el período</div>';
+
+    // Calidad
+    document.getElementById('reportes-calidad').innerHTML = d.calidad.length
+      ? '<table style="width:100%;font-size:12px"><thead><tr><th>Lote</th><th>Inspector</th><th>Estado</th><th>Calif</th><th>Fecha</th></tr></thead><tbody>' +
+        d.calidad.slice(0,8).map(c => {
+          const cls = c.estado_fitosanitario === 'Sano' ? 'badge-green' : c.estado_fitosanitario === 'Plaga leve' ? 'badge-yellow' : 'badge-red';
+          return `<tr><td>${c.lote_producto}</td><td>${c.inspector}</td><td><span class="badge ${cls}">${c.estado_fitosanitario}</span></td><td>${c.calificacion}/5</td><td>${c.fecha}</td></tr>`;
+        }).join('') + '</tbody></table>'
+      : '<div class="empty-state">Sin inspecciones en el período</div>';
   } catch (e) { showToast(e.message, 'error'); }
 }
 
 function generarPDF() {
-  window.open(API_BASE + '/api/reportes/pdf', '_blank');
+  const fi = document.getElementById('f-reporte-inicio').value;
+  const ff = document.getElementById('f-reporte-fin').value;
+  window.open(API_BASE + '/api/reportes/pdf?fecha_inicio=' + fi + '&fecha_fin=' + ff, '_blank');
 }
 
 // ============ FACTURACION ============
@@ -2583,19 +2656,59 @@ async function eliminarCosto(id) {
 // ============ EXPORTAR EXCEL ============
 async function exportarExcel() {
   try {
-    const res = await fetch(API_BASE + '/api/export/excel', { headers: { 'x-auth-token': SESSION.token } });
+    const fi = document.getElementById('f-reporte-inicio').value;
+    const ff = document.getElementById('f-reporte-fin').value;
+    const qs = '?fecha_inicio=' + fi + '&fecha_fin=' + ff;
+    const res = await fetch(API_BASE + '/api/export/excel' + qs, { headers: { 'x-auth-token': SESSION.token } });
     if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Error al exportar'); }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'Reporte-Vivero-' + new Date().toISOString().slice(0, 7) + '.xlsx';
+    a.download = 'Reporte-Vivero-' + fi + '_al_' + ff + '.xlsx';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast('Excel descargado');
   } catch (e) { showToast(e.message, 'error'); }
+}
+
+function aplicarFiltroReportes() {
+  const fi = document.getElementById('f-reporte-inicio').value;
+  const ff = document.getElementById('f-reporte-fin').value;
+  if (!fi || !ff) return showToast('Seleccione ambas fechas', 'error');
+  if (fi > ff) return showToast('La fecha inicio debe ser anterior a la fecha fin', 'error');
+  cargarReportesConFechas();
+}
+
+function filtroReportesRapido(tipo) {
+  const hoy = new Date();
+  const fmt = d => d.toISOString().slice(0, 10);
+  let fi, ff;
+  switch (tipo) {
+    case 'hoy':
+      fi = ff = fmt(hoy);
+      break;
+    case 'semana': {
+      const dia = hoy.getDay();
+      const diff = dia === 0 ? 6 : dia - 1;
+      fi = fmt(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - diff));
+      ff = fmt(hoy);
+      break;
+    }
+    case 'mes':
+      fi = fmt(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+      ff = fmt(hoy);
+      break;
+    case 'trimestre':
+      fi = fmt(new Date(hoy.getFullYear(), hoy.getMonth() - 2, 1));
+      ff = fmt(hoy);
+      break;
+  }
+  document.getElementById('f-reporte-inicio').value = fi;
+  document.getElementById('f-reporte-fin').value = ff;
+  cargarReportesConFechas();
 }
 
 // ============ PASSWORD ============

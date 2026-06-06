@@ -968,23 +968,21 @@ app.get('/api/dashboard/kpis', async (req, res) => {
 app.get('/api/export/excel', async (req, res) => {
   try {
     const XLSX = require('xlsx');
-    const { mes } = req.query;
+    const { fecha_inicio, fecha_fin } = req.query;
     const today = new Date();
-    const y = today.getFullYear();
-    const m = mes || `${y}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-    const monthStart = `${m}-01`;
-    const y2 = today.getMonth() === 11 ? y + 1 : y;
-    const m2 = today.getMonth() === 11 ? 1 : today.getMonth() + 2;
-    const monthEnd = `${y2}-${String(m2).padStart(2, '0')}-01`;
+    const m = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const fi = fecha_inicio || `${m}-01`;
+    const ff = fecha_fin || today.toISOString().slice(0,10);
+    const periodoLabel = fi + '_al_' + ff;
 
     const wb = XLSX.utils.book_new();
 
     // Hoja 1: Ventas
     const ventas = await query(`
-      SELECT v.folio, c.nombre as cliente, u.nombre as vendedor, v.total, v.metodo_pago, v.created_at as fecha
+      SELECT v.id, v.folio, c.nombre as cliente, u.nombre as vendedor, v.total, v.metodo_pago, v.created_at as fecha
       FROM ventas v LEFT JOIN clientes c ON v.cliente_id = c.id LEFT JOIN usuarios u ON v.usuario_id = u.id
-      WHERE v.created_at >= ? AND v.created_at < ? ORDER BY v.created_at
-    `, [monthStart, monthEnd]);
+      WHERE date(v.created_at) >= ? AND date(v.created_at) <= ? ORDER BY v.created_at
+    `, [fi, ff]);
     for (const v of ventas) {
       const det = await query('SELECT producto_nombre, cantidad, precio_unitario, subtotal FROM ventas_detalle WHERE venta_id = ?', [v.id]);
       v.productos = det.map(d => `${d.producto_nombre} x${d.cantidad}`).join(', ');
@@ -994,7 +992,7 @@ app.get('/api/export/excel', async (req, res) => {
     XLSX.utils.book_append_sheet(wb, ws1, 'Ventas');
 
     // Hoja 2: Adquisiciones
-    const adq = await query('SELECT * FROM adquisicion_plantas ORDER BY fecha_adquisicion');
+    const adq = await query('SELECT * FROM adquisicion_plantas WHERE date(fecha_adquisicion) >= ? AND date(fecha_adquisicion) <= ? ORDER BY fecha_adquisicion', [fi, ff]);
     const adqRows = [];
     for (const a of adq) {
       const det = await query(`
@@ -1009,7 +1007,7 @@ app.get('/api/export/excel', async (req, res) => {
     XLSX.utils.book_append_sheet(wb, ws2, 'Adquisiciones');
 
     // Hoja 3: Costos de operacion
-    const costos = await query("SELECT * FROM costos_operacion WHERE strftime('%Y-%m', fecha) = ? ORDER BY fecha", [m]);
+    const costos = await query("SELECT * FROM costos_operacion WHERE date(fecha) >= ? AND date(fecha) <= ? ORDER BY fecha", [fi, ff]);
     const ws3 = XLSX.utils.json_to_sheet(costos.map(c => ({ Tipo: c.tipo, Concepto: c.concepto, Monto: c.monto, Fecha: c.fecha })));
     XLSX.utils.book_append_sheet(wb, ws3, 'Costos Operacion');
 
@@ -1019,9 +1017,9 @@ app.get('/api/export/excel', async (req, res) => {
       SELECT COALESCE(SUM(vd.cantidad * COALESCE(p.costo_adquisicion, p.costo, 0)), 0) as total
       FROM ventas_detalle vd JOIN ventas v ON vd.venta_id = v.id
       LEFT JOIN plantas p ON vd.producto_tipo='planta' AND vd.producto_id = p.id
-      WHERE v.created_at >= ? AND v.created_at < ?
-    `, [monthStart, monthEnd]);
-    const costOp = await queryOne("SELECT COALESCE(SUM(monto),0) as total FROM costos_operacion WHERE strftime('%Y-%m', fecha) = ?", [m]);
+      WHERE date(v.created_at) >= ? AND date(v.created_at) <= ?
+    `, [fi, ff]);
+    const costOp = await queryOne("SELECT COALESCE(SUM(monto),0) as total FROM costos_operacion WHERE date(fecha) >= ? AND date(fecha) <= ?", [fi, ff]);
     const utilBruta = totalVentas - (Number(costAdq.total) || 0);
     const utilNeta = utilBruta - (Number(costOp.total) || 0);
     const ticketPromedio = ventas.length > 0 ? totalVentas / ventas.length : 0;
@@ -1051,7 +1049,7 @@ app.get('/api/export/excel', async (req, res) => {
 
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=Reporte-Vivero-${m}.xlsx`);
+    res.setHeader('Content-Disposition', `attachment; filename=Reporte-Vivero-${periodoLabel}.xlsx`);
     res.send(buf);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1285,26 +1283,51 @@ app.get('/api/facturacion/pdf/:ventaId', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ==================== REPORTES API ====================
+app.get('/api/reportes', async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.query;
+    const fi = fecha_inicio || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+    const ff = fecha_fin || new Date().toISOString().slice(0,10);
+
+    const ventas = await query('SELECT v.*, c.nombre as cliente_nombre, u.nombre as usuario_nombre FROM ventas v LEFT JOIN clientes c ON v.cliente_id = c.id LEFT JOIN usuarios u ON v.usuario_id = u.id WHERE date(v.created_at) >= ? AND date(v.created_at) <= ? ORDER BY v.created_at DESC', [fi, ff]);
+    const adquisiciones = await query('SELECT * FROM adquisicion_plantas WHERE date(fecha_adquisicion) >= ? AND date(fecha_adquisicion) <= ? ORDER BY fecha_adquisicion DESC', [fi, ff]);
+    const costos = await query('SELECT * FROM costos_operacion WHERE date(fecha) >= ? AND date(fecha) <= ? ORDER BY fecha DESC', [fi, ff]);
+    const calidad = await query('SELECT * FROM calidad_inspecciones WHERE date(fecha) >= ? AND date(fecha) <= ? ORDER BY fecha DESC', [fi, ff]);
+
+    const totalVentas = ventas.reduce((s, v) => s + Number(v.total), 0);
+    const totalCostosOp = costos.reduce((s, c) => s + Number(c.monto), 0);
+    const totalingresos = totalVentas;
+    const totalCostos = totalCostosOp;
+
+    res.json({ ventas, adquisiciones, costos, calidad, totalVentas, totalCostosOp, totalingresos, totalCostos, fecha_inicio: fi, fecha_fin: ff });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ==================== REPORTES PDF ====================
 app.get('/api/reportes/pdf', async (req, res) => {
   try {
+    const { fecha_inicio, fecha_fin } = req.query;
+    const fi = fecha_inicio || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+    const ff = fecha_fin || new Date().toISOString().slice(0,10);
+
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename=reporte_vivero.pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=reporte_vivero_${fi}_${ff}.pdf`);
     doc.pipe(res);
 
-    const mes = new Date().toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+    const periodoStr = new Date(fi).toLocaleDateString('es-MX') + ' al ' + new Date(ff).toLocaleDateString('es-MX');
 
     doc.fontSize(22).font('Helvetica-Bold').text('Vivero — Sistema de Gestión', { align: 'center' });
-    doc.fontSize(12).font('Helvetica').text('Reporte del ' + mes, { align: 'center' });
+    doc.fontSize(12).font('Helvetica').text('Reporte del ' + periodoStr, { align: 'center' });
     doc.moveDown(0.3);
     doc.fontSize(9).fillColor('#666').text('Generado: ' + new Date().toLocaleDateString('es-MX'), { align: 'center' });
     doc.moveDown(1);
 
-    const ventasMes = await queryOne("SELECT COALESCE(SUM(total),0) as t FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
-    const unidadesVendidas = await queryOne("SELECT COALESCE(SUM(vd.cantidad),0) as t FROM ventas_detalle vd JOIN ventas v ON vd.venta_id = v.id WHERE strftime('%Y-%m', v.created_at) = strftime('%Y-%m', 'now')");
-    const clientesNuevos = await queryOne("SELECT COUNT(*) as c FROM clientes WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
-    const totalVentas = await queryOne("SELECT COALESCE(SUM(total),0) as t FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')");
+    const ventasMes = await queryOne("SELECT COALESCE(SUM(total),0) as t FROM ventas WHERE date(created_at) >= ? AND date(created_at) <= ?", [fi, ff]);
+    const unidadesVendidas = await queryOne("SELECT COALESCE(SUM(vd.cantidad),0) as t FROM ventas_detalle vd JOIN ventas v ON vd.venta_id = v.id WHERE date(v.created_at) >= ? AND date(v.created_at) <= ?", [fi, ff]);
+    const clientesNuevos = await queryOne("SELECT COUNT(*) as c FROM clientes WHERE date(created_at) >= ? AND date(created_at) <= ?", [fi, ff]);
+    const totalVentas = await queryOne("SELECT COALESCE(SUM(total),0) as t FROM ventas WHERE date(created_at) >= ? AND date(created_at) <= ?", [fi, ff]);
     const gastosOp = (totalVentas?.t || 0) * 0.38;
 
     doc.fillColor('#2d6a4f').fontSize(14).font('Helvetica-Bold').text('Resumen Ejecutivo', { underline: true });
@@ -1332,9 +1355,9 @@ app.get('/api/reportes/pdf', async (req, res) => {
     const topProductos = await query(`
       SELECT vd.producto_nombre, SUM(vd.cantidad) as total FROM ventas_detalle vd
       JOIN ventas v ON vd.venta_id = v.id
-      WHERE strftime('%Y-%m', v.created_at) = strftime('%Y-%m', 'now')
+      WHERE date(v.created_at) >= ? AND date(v.created_at) <= ?
       GROUP BY vd.producto_nombre ORDER BY total DESC LIMIT 5
-    `);
+    `, [fi, ff]);
 
     if (topProductos.length > 0) {
       doc.fillColor('#2d6a4f').fontSize(14).font('Helvetica-Bold').text('Top Productos Vendidos', { underline: true });
@@ -1364,11 +1387,11 @@ app.get('/api/reportes/pdf', async (req, res) => {
     doc.moveDown(1);
 
     const ventasPorSemana = await query(`
-      SELECT CAST(strftime('%W', created_at) AS INTEGER) - CAST(strftime('%W', date('now','start of month')) AS INTEGER) + 1 as semana,
+      SELECT strftime('%W', created_at) as semana,
              SUM(total) as total
-      FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+      FROM ventas WHERE date(created_at) >= ? AND date(created_at) <= ?
       GROUP BY semana ORDER BY semana
-    `);
+    `, [fi, ff]);
 
     if (ventasPorSemana.length > 0) {
       doc.fillColor('#2d6a4f').fontSize(14).font('Helvetica-Bold').text('Ventas por Semana', { underline: true });
