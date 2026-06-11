@@ -309,21 +309,6 @@ if (!DATABASE_URL) {
   await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',17,7,5]);
   await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',18,5,5]);
   await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',19,9,8]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',5,30,10]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',6,25,8]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',7,3,10]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',8,10,5]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',9,0,10]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',10,8,5]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',11,12,8]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',12,2,10]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',13,35,15]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',14,28,10]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',15,2,10]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',16,20,8]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',17,7,5]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',18,5,5]);
-    await execute("INSERT INTO inventario (producto_tipo,producto_id,stock_actual,stock_minimo) VALUES (?,?,?,?)", ['planta',19,9,8]);
   }
 
   async function seedLaura() {
@@ -340,7 +325,8 @@ if (!DATABASE_URL) {
 
 // ==================== PostgreSQL (Railway) ====================
 const { Pool } = require('pg');
-const pool = new Pool({ connectionString: DATABASE_URL, max: 10, idleTimeoutMillis: 30000 });
+const pool = new Pool({ connectionString: DATABASE_URL, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
+pool.on('error', err => { console.error('Pool error:', err.message); });
 
 // Convertir ? a $1, $2, etc.
 function convertParams(sql, params) {

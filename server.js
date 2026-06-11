@@ -13,15 +13,18 @@ const HOST = process.env.HOST || '0.0.0.0';
 const crypto = require('crypto');
 
 const sessions = new Map();
+const SESSION_TTL = 24 * 60 * 60 * 1000; // 24h
+setInterval(() => { const now = Date.now(); for (const [k, v] of sessions) { if (v._expires < now) sessions.delete(k); } }, 60000);
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 function authMiddleware(req, res, next) {
-  if (req.path === '/login' || req.path === '/register-public' || req.path.startsWith('/facturacion/pdf/') || req.path.startsWith('/reportes/')) return next();
-  const token = req.headers['x-auth-token'];
+  if (req.path === '/login' || req.path === '/register-public') return next();
+  let token = req.headers['x-auth-token'] || req.query.token;
   if (!token || !sessions.has(token)) return res.status(401).json({ error: 'No autorizado' });
+  if (sessions.get(token)._expires < Date.now()) { sessions.delete(token); return res.status(401).json({ error: 'Sesión expirada' }); }
   req.user = sessions.get(token);
   next();
 }
@@ -35,6 +38,8 @@ function requireRole(...roles) {
 }
 
 app.use('/api', authMiddleware);
+
+const safeFilename = s => String(s).replace(/[\r\n]/g, '').replace(/[^a-zA-Z0-9_.\-áéíóúüñÁÉÍÓÚÜÑ\s()]/g, '_');
 
 let dbReady = false;
 
@@ -66,13 +71,13 @@ app.post('/api/login', async (req, res) => {
 
     await execute("UPDATE usuarios SET ultimo_acceso = CURRENT_TIMESTAMP WHERE id = ?", [user.id]);
     const token = crypto.randomBytes(32).toString('hex');
-    sessions.set(token, { id: user.id, nombre: user.nombre, username: user.username, rol: user.rol, permisos: JSON.parse(user.permisos || '{}') });
+    sessions.set(token, { id: user.id, nombre: user.nombre, username: user.username, rol: user.rol, permisos: JSON.parse(user.permisos || '{}'), _expires: Date.now() + SESSION_TTL });
 
     res.json({
       token, id: user.id, nombre: user.nombre, username: user.username,
       rol: user.rol, permisos: JSON.parse(user.permisos || '{}')
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(500).json({ error: 'Error al iniciar sesión' }); }
 });
 
 app.post('/api/registrar', requireRole('Administrador'), async (req, res) => {
@@ -105,7 +110,7 @@ app.post('/api/register-public', async (req, res) => {
     if (exists) return res.status(400).json({ error: 'El usuario ya existe' });
 
     const hash = bcrypt.hashSync(password, 10);
-    const finalRol = (rol === 'Administrador') ? 'Administrador' : 'Vendedor';
+    const finalRol = 'Vendedor'; // siempre Vendedor en registro público
     await execute('INSERT INTO usuarios (nombre, username, password, rol) VALUES (?,?,?,?)', [nombre, username, hash, finalRol]);
     res.json({ success: true, message: 'Cuenta creada exitosamente' });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -170,7 +175,7 @@ app.get('/api/dashboard', async (req, res) => {
     `);
 
     const ventasSemana = await query(`
-      SELECT CAST(strftime('%W', created_at) AS INTEGER) - CAST(strftime('%W', date('now','start of month')) AS INTEGER) + 1 as semana,
+      SELECT strftime('%W', created_at) as semana,
              COALESCE(SUM(total),0) as total
       FROM ventas WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
       GROUP BY semana ORDER BY semana
@@ -850,7 +855,7 @@ app.get('/api/dashboard/utilidad', async (req, res) => {
     `, [mStartISO, mEndISO]);
 
     // Costos de operacion del mes
-    const costOp = await queryOne("SELECT COALESCE(SUM(monto),0) as total FROM costos_operacion WHERE strftime('%Y-%m', fecha) = TO_CHAR(CURRENT_DATE, 'YYYY-MM')");
+    const costOp = await queryOne("SELECT COALESCE(SUM(monto),0) as total FROM costos_operacion WHERE strftime('%Y-%m', fecha) = strftime('%Y-%m', 'now')");
 
     const totalVentas = Number(ventas.total) || 0;
     const totalCostoAdq = Number(costAdq.total) || 0;
@@ -1049,7 +1054,7 @@ app.get('/api/export/excel', async (req, res) => {
 
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=Reporte-Vivero-${periodoLabel}.xlsx`);
+    res.setHeader('Content-Disposition', 'attachment; filename=Reporte-Vivero-' + safeFilename(periodoLabel) + '.xlsx');
     res.send(buf);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1133,7 +1138,7 @@ app.post('/api/facturacion/timbrar', requireRole('Administrador', 'Vendedor'), a
     const existente = await queryOne('SELECT * FROM facturacion WHERE venta_id = ? AND cfdi_estado = ?', [venta_id, 'Timbrato']);
     if (existente) return res.status(400).json({ error: 'Esta venta ya tiene un CFDI timbrado' });
 
-    const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); });
+    const uuid = crypto.randomUUID();
     const folioFiscal = 'CFDI-' + String(venta_id).padStart(6, '0');
     const fechaTimbrado = new Date().toISOString();
 
@@ -1176,7 +1181,7 @@ app.get('/api/facturacion/pdf/:ventaId', async (req, res) => {
 
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename=factura_' + venta.folio + '.pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename=factura_' + safeFilename(venta.folio) + '.pdf');
     doc.pipe(res);
 
     // Encabezado emisor
@@ -1313,7 +1318,7 @@ app.get('/api/reportes/pdf', async (req, res) => {
 
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=reporte_vivero_${fi}_${ff}.pdf`);
+    res.setHeader('Content-Disposition', 'attachment; filename=reporte_vivero_' + safeFilename(fi + '_' + ff) + '.pdf');
     doc.pipe(res);
 
     const periodoStr = new Date(fi).toLocaleDateString('es-MX') + ' al ' + new Date(ff).toLocaleDateString('es-MX');
@@ -1428,6 +1433,4 @@ app.listen(PORT, HOST, () => {
   }
   console.log('\x1b[32m%s\x1b[0m', ' Vivero API running on http://localhost:' + PORT);
   console.log(' Other devices on your network: http://' + ip + ':' + PORT);
-  console.log(' Default users: admin (Admin), vendedor (Vendedor)');
-  console.log(' Passwords: <username> + "123!" (e.g., admin + Admin123!)');
 });
