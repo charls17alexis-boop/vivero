@@ -111,8 +111,8 @@ app.post('/api/register-public', async (req, res) => {
 
     const hash = bcrypt.hashSync(password, 10);
     const finalRol = 'Vendedor'; // siempre Vendedor en registro público
-    await execute('INSERT INTO usuarios (nombre, username, password, rol) VALUES (?,?,?,?)', [nombre, username, hash, finalRol]);
-    res.json({ success: true, message: 'Cuenta creada exitosamente' });
+    await execute('INSERT INTO usuarios (nombre, username, password, rol, activo) VALUES (?,?,?,?,0)', [nombre, username, hash, finalRol]);
+    res.json({ success: true, message: 'Cuenta creada. Espera a que un administrador la active.' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -219,10 +219,7 @@ tr:hover td { background: #faf9f7; }
         <input type="password" id="reg-pass2" placeholder="Confirmar contraseña" style="width:100%;padding:10px 40px 10px 14px;border:2px solid var(--gris-claro);border-radius:8px;font-size:13px;outline:none;transition:border-color 0.2s">
         <span id="toggle-reg-pass2" onclick="toggleRegPassword2()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;color:var(--gris);user-select:none">&#x1F441;</span>
       </div>
-      <select id="reg-rol" style="width:100%;padding:10px 14px;border:2px solid var(--gris-claro);border-radius:8px;font-size:13px;outline:none;margin-bottom:6px">
-        <option value="Vendedor">Vendedor</option>
-        <option value="Administrador">Administrador</option>
-      </select>
+      <input type="hidden" id="reg-rol" value="Vendedor">
       <ul style="list-style:none;padding:0;font-size:11px;margin:6px 0">
         <li id="chk-len" style="color:#999">○ Mínimo 8 caracteres</li>
         <li id="chk-may" style="color:#999">○ Una mayúscula</li>
@@ -232,6 +229,7 @@ tr:hover td { background: #faf9f7; }
         <li id="chk-match" style="color:#999">○ Coinciden las contraseñas</li>
       </ul>
       <div id="reg-error" style="color:var(--rojo);font-size:12px;display:none;margin-bottom:6px"></div>
+      <div id="reg-success" style="color:var(--verde);font-size:12px;display:none;margin-bottom:6px">Cuenta creada. Espera a que un administrador la active.</div>
       <button class="btn btn-primary" style="width:100%" onclick="doRegistro()">CREAR CUENTA</button>
     </div>
     
@@ -831,9 +829,7 @@ async function doRegistro() {
     document.getElementById('reg-pass').value = '';
     document.getElementById('reg-pass2').value = '';
     document.querySelectorAll('#registro-form ul li').forEach(l => l.style.color = '#999');
-    document.getElementById('login-user').value = username;
-    document.getElementById('login-pass').value = password;
-    doLogin();
+    document.getElementById('reg-success').style.display = 'block';
   } catch (e) {
     document.getElementById('reg-error').textContent = e.message;
     document.getElementById('reg-error').style.display = 'block';
@@ -1073,19 +1069,23 @@ async function cargarDashboard() {
 async function cargarUsuarios() {
   try {
     const data = await api('GET', '/api/usuarios');
-    document.getElementById('tbody-usuarios').innerHTML = data.map(u =>
-      `<tr>
+    document.getElementById('tbody-usuarios').innerHTML = data.map(u => {
+      const esPendiente = !u.activo && !u.ultimo_acceso;
+      const estadoBadge = u.activo ? 'badge-green' : (esPendiente ? 'badge-yellow' : 'badge-red');
+      const estadoLabel = u.activo ? 'Activo' : (esPendiente ? 'Pendiente' : 'Inactivo');
+      const btnAprobar = esPendiente && SESSION.rol === 'Administrador' ? `<button class="btn btn-sm" style="background:var(--verde);color:#fff;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:11px" onclick="aprobarUsuario(${u.id})">&#x2714; Aprobar</button>` : '';
+      return `<tr>
         <td>${escHtml(u.nombre)}</td>
         <td>${escHtml(u.username)}</td>
         <td><span class="badge badge-blue">${escHtml(u.rol)}</span></td>
-        <td><span class="badge ${u.activo ? 'badge-green' : 'badge-yellow'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
+        <td><span class="badge ${estadoBadge}">${estadoLabel}</span></td>
         <td>${escHtml(u.ultimo_acceso || 'Nunca')}</td>
         <td class="actions">
           <button class="btn btn-edit btn-sm" onclick='modalUsuario(${JSON.stringify(u).replace(/'/g,"&#39;")})'>&#x270F;&#xFE0F;</button>
-          ${u.activo ? `<button class="btn btn-sm" style="background:#888;color:#fff;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:11px" onclick="confirmarEliminar('usuario', ${u.id}, '${escQ(u.nombre)}')">&#x1F5D1; Desactivar</button>` : `<span style="color:#999;font-size:11px">—</span>`}
+          ${u.activo ? `<button class="btn btn-sm" style="background:#888;color:#fff;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:11px" onclick="confirmarEliminar('usuario', ${u.id}, '${escQ(u.nombre)}')">&#x1F5D1; Desactivar</button>` : btnAprobar}
         </td>
-      </tr>`
-    ).join('');
+      </tr>`;
+    }).join('');
   } catch (e) { showToast(e.message, 'error'); }
 }
 
@@ -1129,6 +1129,15 @@ function modalUsuario(user) {
   };
 
   abrirModal();
+}
+
+async function aprobarUsuario(id) {
+  if (!confirm('¿Aprobar este usuario? Podrá iniciar sesión inmediatamente.')) return;
+  try {
+    await api('POST', '/api/usuarios/' + id + '/restore');
+    showToast('Usuario aprobado');
+    cargarUsuarios();
+  } catch (e) { showToast(e.message, 'error'); }
 }
 
 // ============ PLANTAS ============
@@ -1404,7 +1413,7 @@ function modalVenta() {
         </div>
         <div class="form-row">
           <div class="form-group"><label>Tipo de venta</label><select id="f-tipo-venta" onchange="toggleTipoVenta()"><option value="Normal">Normal (pago completo)</option><option value="Anticipo">Anticipo / Apartado</option><option value="Credito">Crédito</option></select></div>
-          <div class="form-group"><label>Fecha programada</label><input type="date" id="f-fecha-programada"></div>
+          <div class="form-group"><label>Fecha programada</label><input type="date" id="f-fecha-programada" min="${new Date().toISOString().split('T')[0]}" value="${new Date().toISOString().split('T')[0]}"></div>
         </div>
         <div id="anticipo-fields" style="display:none">
           <div class="form-row">
@@ -1438,6 +1447,7 @@ function modalVenta() {
         }).join('');
       });
       document.querySelectorAll('.prod-cant').forEach(inp => inp.addEventListener('input', calcTotalVenta));
+      document.querySelectorAll('.prod-select').forEach(sel => sel.addEventListener('change', calcTotalVenta));
       document.getElementById('f-anticipo').addEventListener('input', calcTotalVenta);
     });
   });
@@ -1650,6 +1660,8 @@ function agregarProductoVenta() {
     allOpts.forEach(o => o.disabled = true);
   }
   row.querySelector('.prod-cant').addEventListener('input', calcTotalVenta);
+  sel.addEventListener('change', calcTotalVenta);
+  calcTotalVenta();
 }
 
 function calcTotalVenta() {
