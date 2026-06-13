@@ -416,6 +416,19 @@ tr:hover td { background: #faf9f7; }
       <button class="btn btn-primary" onclick="modalVenta(null)">+ Nueva Venta</button>
     </div>
     <div class="stats-grid" id="venta-stats" style="grid-template-columns:repeat(3,1fr)"></div>
+
+    <!-- Anticipos Pendientes -->
+    <div class="card" id="card-anticipos">
+      <div class="card-header"><span class="card-title">&#x1F514; Anticipos Pendientes</span></div>
+      <div class="card-body"><div id="anticipos-pendientes"></div></div>
+    </div>
+
+    <!-- Créditos Pendientes -->
+    <div class="card" id="card-creditos">
+      <div class="card-header"><span class="card-title">&#x1F4B3; Créditos Pendientes</span></div>
+      <div class="card-body"><div id="creditos-pendientes"></div></div>
+    </div>
+
     <div class="card">
       <div class="card-header"><span class="card-title">Historial de ventas</span></div>
       <div class="card-body">
@@ -1059,6 +1072,20 @@ async function cargarDashboard() {
           }).join('');
         }
       } catch (e) { /* no calidad alertas */ }
+
+      // Alertas de Anticipos vencidos
+      try {
+        const antVen = await api('GET', '/api/anticipos/alertas');
+        if (antVen && antVen.length > 0) {
+          const antDiv = document.createElement('div');
+          antDiv.className = 'card';
+          antDiv.id = 'card-anticipos-alertas';
+          antDiv.innerHTML = `<div class="card-header"><span class="card-title">&#x26A0;&#xFE0F; Anticipos Vencidos</span></div><div class="card-body">${antVen.map(a =>
+            `<div class="alert alert-red">&#x26A0;&#xFE0F; ${a.cliente_nombre || 'Cliente'} — Anticipo de $${fmt(a.monto_anticipo)} — Límite: ${a.fecha_limite}</div>`
+          ).join('')}</div>`;
+          document.getElementById('admin-dashboard-section').appendChild(antDiv);
+        }
+      } catch (e) { /* no anticipos alertas */ }
     } catch (e) { /* no admin dashboard */ }
   } else {
     document.getElementById('admin-dashboard-section').style.display = 'none';
@@ -1378,7 +1405,7 @@ async function cargarVentas() {
         <td>$${fmt(v.total)}</td>
         <td>${v.tipo_venta !== 'Normal' ? `<span class="badge badge-yellow">${v.tipo_venta}</span>` : '—'}</td>
         <td>${v.metodo_pago}</td>
-        <td>${v.fecha_programada || (v.created_at ? v.created_at.split(' ')[0] : '')}</td>
+        <td>${v.fecha_programada || (v.created_at ? v.created_at.slice(0,10) : '')}</td>
         <td><span class="badge ${v.estado === 'Pagado' ? 'badge-green' : 'badge-yellow'}">${v.estado}</span></td>
         <td class="actions">
           <button class="btn btn-edit btn-sm" onclick="verDetalleVenta(${v.id},'${escQ(v.folio)}')">&#x1F441;&#xFE0F; Ver</button>
@@ -1393,7 +1420,76 @@ async function cargarVentas() {
       <div class="stat-card"><div class="label">Transacciones mes</div><div class="value">${stats.ventasCount}</div></div>
       <div class="stat-card"><div class="label">Ticket promedio</div><div class="value">$${fmt(stats.ticketPromedio)}</div></div>
     `;
+
+    // Cargar anticipos pendientes
+    cargarAnticiposPendientes();
+    // Cargar créditos pendientes
+    cargarCreditosPendientes();
   } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function cargarAnticiposPendientes() {
+  try {
+    const data = await api('GET', '/api/anticipos/pendientes');
+    const div = document.getElementById('anticipos-pendientes');
+    if (!div) return;
+    if (!data.length) {
+      div.innerHTML = '<div style="padding:16px;color:var(--gris);font-size:13px">No hay anticipos pendientes</div>';
+      return;
+    }
+    div.innerHTML = `<table style="width:100%"><thead><tr><th>Cliente</th><th>Productos</th><th>Total</th><th>Anticipo</th><th>Saldo</th><th>Fecha límite</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
+      ${data.map(a => {
+        const prods = JSON.parse(a.productos || '[]');
+        const prodStr = prods.map(p => p.producto_nombre + ' x' + p.cantidad).join(', ');
+        const vencido = a.fecha_limite < new Date().toISOString().slice(0,10);
+        const estadoCls = vencido ? 'badge-red' : 'badge-yellow';
+        const estadoLabel = vencido ? 'Vencido' : 'Pendiente';
+        return `<tr>
+          <td>${escHtml(a.cliente_nombre || 'Público general')}</td>
+          <td style="font-size:12px">${escHtml(prodStr)}</td>
+          <td>$${fmt(a.total_venta)}</td>
+          <td>$${fmt(a.monto_anticipo)}</td>
+          <td><strong>$${fmt(a.saldo_pendiente)}</strong></td>
+          <td><span style="color:${vencido ? '#c0392b' : '#856404'}">${a.fecha_limite}</span></td>
+          <td><span class="badge ${estadoCls}">${estadoLabel}</span></td>
+          <td class="actions">
+            <button class="btn btn-primary btn-sm" onclick="liquidarAnticipo(${a.id})">&#x2714; Liquidar</button>
+            <button class="btn btn-outline btn-sm" onclick="mostrarTicketAnticipo(${a.id})">&#x1F4E6; Ticket</button>
+            ${SESSION.rol === 'Administrador' ? `<button class="btn btn-danger btn-sm" onclick="cancelarAnticipo(${a.id})">&#x1F5D1; Cancelar</button>` : ''}
+          </td>
+        </tr>`;
+      }).join('')}
+    </tbody></table>`;
+  } catch (e) { /* ignore */ }
+}
+
+async function cargarCreditosPendientes() {
+  try {
+    const data = await api('GET', '/api/creditos/pendientes');
+    const div = document.getElementById('creditos-pendientes');
+    if (!div) return;
+    if (!data.length) {
+      div.innerHTML = '<div style="padding:16px;color:var(--gris);font-size:13px">No hay créditos pendientes</div>';
+      return;
+    }
+    div.innerHTML = `<table style="width:100%"><thead><tr><th>Cliente</th><th>Folio</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Próximo pago</th><th>Acciones</th></tr></thead><tbody>
+      ${data.map(c => {
+        const pagado = c.total_pagado || 0;
+        return `<tr>
+          <td>${escHtml(c.cliente_nombre)}</td>
+          <td>${c.folio}</td>
+          <td>$${fmt(c.total)}</td>
+          <td>$${fmt(pagado)}</td>
+          <td><strong>$${fmt(c.saldo_pendiente)}</strong></td>
+          <td>${c.proximo_pago || '—'}</td>
+          <td class="actions">
+            <button class="btn btn-primary btn-sm" onclick="registrarAbonoCredito(${c.id},'${escQ(c.folio)}')">+ Abono</button>
+            <button class="btn btn-edit btn-sm" onclick="verDetalleVenta(${c.id},'${escQ(c.folio)}')">&#x1F441;&#xFE0F;</button>
+          </td>
+        </tr>`;
+      }).join('')}
+    </tbody></table>`;
+  } catch (e) { /* ignore */ }
 }
 
 function modalVenta() {
@@ -1418,7 +1514,9 @@ function modalVenta() {
         <div id="anticipo-fields" style="display:none">
           <div class="form-row">
             <div class="form-group"><label>Anticipo \$</label><input type="number" id="f-anticipo" placeholder="0" min="0" value="0" step="0.01"></div>
+            <div class="form-group"><label>Método pago anticipo</label><select id="f-anticipo-pago"><option>Efectivo</option><option>Transferencia</option></select></div>
           </div>
+          <div class="form-group"><label>Fecha límite para liquidar (máx. 30 días)</label><input type="date" id="f-anticipo-limite" min="${new Date().toISOString().split('T')[0]}" value="${new Date(Date.now() + 30*86400000).toISOString().split('T')[0]}"></div>
         </div>
         <div id="credito-fields" style="display:none">
           <div class="form-row">
@@ -1452,24 +1550,41 @@ function modalVenta() {
     });
   });
 
-  document.getElementById('modal-save-btn').onclick = async () => {
+      document.getElementById('modal-save-btn').onclick = async () => {
     const rows = document.querySelectorAll('.prod-row');
     const prods = [];
     let errorStock = false;
+    const seen = {};
     rows.forEach(r => {
       const sel = r.querySelector('.prod-select');
       const cant = parseInt(r.querySelector('.prod-cant').value) || 1;
       if (sel && cant > 0) {
+        const prodId = parseInt(sel.value);
         const stockDisp = parseInt(sel.options[sel.selectedIndex].dataset.stock);
+        const nombre = sel.options[sel.selectedIndex].dataset.nombre;
+        // Detect duplicate product in rows
+        if (seen[prodId]) {
+          const warn = r.querySelector('.dup-warn');
+          if (!warn) {
+            const w = document.createElement('div');
+            w.className = 'dup-warn';
+            w.style.cssText = 'color:#856404;background:#fef9e7;font-size:11px;padding:3px 8px;border-radius:4px;margin-top:2px';
+            w.textContent = '\u26A0\uFE0F ' + nombre + ' ya est\u00E1 en la lista. Considera consolidar las l\u00EDneas.';
+            r.appendChild(w);
+          }
+        } else {
+          seen[prodId] = true;
+        }
+        // Stock validation
         if (cant > stockDisp) {
           errorStock = true;
-          showToast('Stock insuficiente para ${sel.options[sel.selectedIndex].dataset.nombre}: disponible ${stockDisp}, solicitado ${cant}', 'error');
+          showToast('Stock insuficiente para ' + nombre + ': disponible ' + stockDisp + ', solicitado ' + cant, 'error');
           return;
         }
         prods.push({
           producto_tipo: 'planta',
-          producto_id: parseInt(sel.value),
-          producto_nombre: sel.options[sel.selectedIndex].dataset.nombre,
+          producto_id: prodId,
+          producto_nombre: nombre,
           cantidad: cant,
           precio_unitario: parseFloat(sel.options[sel.selectedIndex].dataset.precio)
         });
@@ -1478,8 +1593,47 @@ function modalVenta() {
     if (errorStock) return;
     if (prods.length === 0) return showToast('Agregue al menos un producto', 'error');
 
+    // Group by producto_id for combined stock validation
+    const grouped = {};
+    prods.forEach(p => { grouped[p.producto_id] = (grouped[p.producto_id] || 0) + p.cantidad; });
+    for (const [pid, totalCant] of Object.entries(grouped)) {
+      const prod = prods.find(p => p.producto_id == pid);
+      if (prod) {
+        try {
+          const check = await api('GET', '/api/plantas');
+          const planta = check.find(p => p.id == pid);
+          if (planta && planta.stock < totalCant) {
+            errorStock = true;
+            showToast(prod.producto_nombre + ': solicitando ' + totalCant + ' unidades pero solo hay ' + planta.stock + ' disponibles', 'error');
+          }
+        } catch (e) { /* continue */ }
+      }
+    }
+    if (errorStock) return;
+
     const tipoVenta = document.getElementById('f-tipo-venta').value;
     const anticipoVal = tipoVenta === 'Anticipo' ? parseFloat(document.getElementById('f-anticipo').value) || 0 : 0;
+
+    if (tipoVenta === 'Anticipo') {
+      // Crear anticipo en lugar de venta
+      const bodyAnt = {
+        cliente_id: parseInt(document.getElementById('f-cliente').value) || null,
+        vendedor_id: SESSION.id,
+        productos: prods,
+        total_venta: prods.reduce((s, p) => s + p.cantidad * p.precio_unitario, 0),
+        monto_anticipo: anticipoVal,
+        fecha_limite: document.getElementById('f-anticipo-limite').value,
+        metodo_pago: document.getElementById('f-anticipo-pago').value
+      };
+      try {
+        const res = await api('POST', '/api/anticipos', bodyAnt);
+        cerrarModal();
+        showToast('Anticipo registrado — Saldo pendiente: $' + fmt(res.saldo_pendiente));
+        mostrarTicketAnticipo(res.id);
+        cargarVentas();
+      } catch (e) { showToast(e.message, 'error'); }
+      return;
+    }
 
     const body = {
       cliente_id: parseInt(document.getElementById('f-cliente').value) || null,
@@ -1557,7 +1711,7 @@ function verDetalleVenta(id, folio) {
       <tr><td>Saldo pendiente</td><td><strong>$${fmt(v.saldo_pendiente)}</strong></td></tr>`;
     const fp = v.fecha_programada ? `<tr><td>Fecha prog.</td><td>${v.fecha_programada}</td></tr>` : '';
     const pagosHtml = (v.pagos && v.pagos.length) ? `
-      <h4 style="margin:16px 0 8px">Pagos (${v.tipo_venta})</h4>
+      <h4 style="margin:16px 0 8px">Pagos/Crédito (${v.tipo_venta})</h4>
       <table style="width:100%;font-size:13px">
         <thead><tr><th>#</th><th>Monto</th><th>Vencimiento</th><th>Fecha pago</th><th>Estado</th><th>Acción</th></tr></thead>
         <tbody>${v.pagos.map(p => {
@@ -1566,6 +1720,20 @@ function verDetalleVenta(id, folio) {
           return `<tr><td>${p.numero_pago}</td><td>$${fmt(p.monto)}</td><td>${p.fecha_vencimiento}</td><td>${p.fecha_pago || '—'}</td><td><span class="badge ${cls}">${p.estado}</span></td><td>${pagoBtn}</td></tr>`;
         }).join('')}</tbody>
       </table>` : '';
+    const abonosHtml = (v.tipo_venta === 'Credito') ? (() => {
+      let h = '<h4 style="margin:16px 0 8px">Historial de Abonos</h4><div id="abonos-list-' + v.id + '"><div style="font-size:12px;color:var(--gris)">Cargando...</div></div>';
+      // Load abonos async
+      setTimeout(() => {
+        api('GET', '/api/creditos/' + v.id + '/abonos').then(ab => {
+          document.getElementById('abonos-list-' + v.id).innerHTML = ab.length
+            ? '<table style="width:100%;font-size:13px"><thead><tr><th>#</th><th>Monto</th><th>Método</th><th>Fecha</th></tr></thead><tbody>' +
+              ab.map(a => `<tr><td>${a.numero_pago}</td><td>$${fmt(a.monto)}</td><td>${a.metodo_pago}</td><td>${a.fecha}</td></tr>`).join('') +
+              '</tbody></table>'
+            : '<div style="font-size:12px;color:var(--gris)">Sin abonos registrados</div>';
+        }).catch(() => {});
+      }, 50);
+      return h;
+    })() : '';
     document.getElementById('modal-body').innerHTML = `
       <table style="width:100%;font-size:13px">
         <tr><td style="color:var(--gris);width:100px">Folio</td><td><strong>${v.folio}</strong></td></tr>
@@ -1584,6 +1752,8 @@ function verDetalleVenta(id, folio) {
         <tbody>${(v.productos || []).map(p => `<tr><td>${p.producto_nombre}</td><td>${p.cantidad}</td><td>$${fmt(p.precio_unitario)}</td><td>$${fmt(p.subtotal)}</td></tr>`).join('')}</tbody>
       </table>
       ${pagosHtml}
+      ${abonosHtml}
+      ${v.saldo_pendiente > 0 && v.tipo_venta === 'Credito' ? `<div style="margin-top:16px"><button class="btn btn-primary" onclick="registrarAbonoCredito(${v.id},'${escQ(v.folio)}')">+ Registrar abono</button></div>` : ''}
       ${v.saldo_pendiente > 0 && v.tipo_venta !== 'Credito' ? `<div style="margin-top:16px"><button class="btn btn-primary" onclick="registrarAbono(${v.id})">+ Registrar abono</button></div>` : ''}
     `;
   });
@@ -1608,6 +1778,96 @@ function registrarPagoCredito(ventaId, clienteId, pagoId, monto) {
     cerrarModal();
     cargarVentas();
   }).catch(e => showToast(e.message, 'error'));
+}
+
+// ============ ANTICIPOS ============
+function mostrarTicketAnticipo(id) {
+  if (!SESSION || !SESSION.token) return;
+  window.open(API_BASE + '/api/anticipos/' + id + '/ticket?token=' + encodeURIComponent(SESSION.token), '_blank');
+}
+
+function liquidarAnticipo(id) {
+  api('GET', '/api/anticipos/pendientes').then(lista => {
+    const a = lista.find(x => x.id === id);
+    if (!a) return showToast('Anticipo no encontrado', 'error');
+    document.getElementById('modal-title').textContent = 'Liquidar Anticipo #' + id;
+    document.getElementById('modal-body').innerHTML = `
+      <p style="margin-bottom:14px;font-size:13px;color:var(--gris)">Cliente: <strong>${escHtml(a.cliente_nombre || 'Público general')}</strong></p>
+      <div class="form-row">
+        <div class="form-group"><label>Total venta</label><input type="text" value="$${fmt(a.total_venta)}" readonly></div>
+        <div class="form-group"><label>Anticipo pagado</label><input type="text" value="$${fmt(a.monto_anticipo)}" readonly></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Saldo pendiente</label><input type="text" id="f-saldo-restante" value="$${fmt(a.saldo_pendiente)}" readonly></div>
+        <div class="form-group"><label>Monto a cobrar</label><input type="number" id="f-monto-restante" value="${a.saldo_pendiente}" min="0" step="0.01"></div>
+      </div>
+      <div class="form-group"><label>Método de pago</label><select id="f-pago-liquidar"><option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option></select></div>
+    `;
+    document.getElementById('modal-save-btn').onclick = async () => {
+      const montoRestante = parseFloat(document.getElementById('f-monto-restante').value) || a.saldo_pendiente;
+      const metodoPago = document.getElementById('f-pago-liquidar').value;
+      try {
+        const res = await api('POST', '/api/anticipos/' + id + '/liquidar', { monto_restante: montoRestante, metodo_pago: metodoPago });
+        cerrarModal();
+        showToast('Anticipo liquidado — Folio: ' + res.folio);
+        mostrarTicket(res.venta_id, res.ticket_number);
+        cargarVentas();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+    abrirModal();
+  });
+}
+
+function cancelarAnticipo(id) {
+  if (!confirm('¿Cancelar este anticipo? No se descontará el stock.')) return;
+  const devolver = confirm('¿Devolver el monto del anticipo al cliente?');
+  api('PUT', '/api/anticipos/' + id + '/cancelar', { devolver_monto: devolver }).then(() => {
+    showToast('Anticipo cancelado');
+    cargarVentas();
+  }).catch(e => showToast(e.message, 'error'));
+}
+
+// ============ ABONOS A CRÉDITOS ============
+function registrarAbonoCredito(ventaId, folio) {
+  document.getElementById('modal-title').textContent = 'Registrar Abono — ' + folio;
+  api('GET', '/api/ventas/' + ventaId).then(v => {
+    document.getElementById('modal-body').innerHTML = `
+      <div class="form-row">
+        <div class="form-group"><label>Cliente</label><input type="text" value="${escHtml(v.cliente_nombre || '—')}" readonly></div>
+        <div class="form-group"><label>Saldo pendiente</label><input type="text" id="f-saldo-actual" value="$${fmt(v.saldo_pendiente)}" readonly></div>
+      </div>
+      <div class="form-group"><label>Monto del abono</label><input type="number" id="f-monto-abono" placeholder="0" min="0" step="0.01" max="${v.saldo_pendiente}"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Fecha</label><input type="date" id="f-fecha-abono" value="${new Date().toISOString().split('T')[0]}"></div>
+        <div class="form-group"><label>Método de pago</label><select id="f-metodo-abono"><option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option></select></div>
+      </div>
+    `;
+    document.getElementById('modal-save-btn').onclick = async () => {
+      const monto = parseFloat(document.getElementById('f-monto-abono').value);
+      if (!monto || monto <= 0) return showToast('Ingrese un monto válido', 'error');
+      if (monto > v.saldo_pendiente) return showToast('El abono supera el saldo pendiente', 'error');
+      try {
+        const res = await api('POST', '/api/creditos/' + ventaId + '/abono', {
+          monto,
+          metodo_pago: document.getElementById('f-metodo-abono').value,
+          fecha: document.getElementById('f-fecha-abono').value
+        });
+        cerrarModal();
+        showToast('Abono registrado #' + res.numero_pago + ' — Saldo: $' + fmt(res.saldo_pendiente));
+        cargarVentas();
+        // Mostrar ticket del abono
+        const abonos = await api('GET', '/api/creditos/' + ventaId + '/abonos');
+        const ultimo = abonos[abonos.length - 1];
+        if (ultimo) mostrarTicketAbono(ventaId, ultimo.id);
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+    abrirModal();
+  });
+}
+
+function mostrarTicketAbono(ventaId, abonoId) {
+  if (!SESSION || !SESSION.token) return;
+  window.open(API_BASE + '/api/creditos/' + ventaId + '/ticket-abono?id_abono=' + abonoId + '&token=' + encodeURIComponent(SESSION.token), '_blank');
 }
 
 function modalCreditoCliente(clienteId) {
@@ -2328,7 +2588,7 @@ async function cargarFacturacion() {
         <td>$${fmt(f.total)}</td>
         <td style="font-size:11px;font-family:monospace">${f.uuid ? f.uuid.slice(0,23)+'…' : '—'}</td>
         <td><span class="badge ${f.cfdi_estado === 'Timbrato' ? 'badge-green' : f.cfdi_estado === 'Cancelado' ? 'badge-yellow' : 'badge-red'}">${f.cfdi_estado || 'Pendiente'}</span></td>
-        <td>${f.fecha_timbrado ? new Date(f.fecha_timbrado).toLocaleDateString('es-MX') : (f.created_at ? f.created_at.split(' ')[0] : '')}</td>
+        <td>${f.fecha_timbrado ? new Date(f.fecha_timbrado).toLocaleDateString('es-MX') : (f.created_at ? f.created_at.slice(0,10) : '')}</td>
         <td class="actions">
           ${f.cfdi_estado === 'Timbrato' ? `<a class="btn btn-sm btn-primary" href="/api/facturacion/pdf/${f.venta_id}?token=${SESSION.token}" target="_blank" style="font-size:11px;text-decoration:none">&#x1F4C4; PDF</a>` : ''}
           ${f.cfdi_estado === 'Timbrato' && SESSION.rol === 'Administrador' ? `<button class="btn btn-warn btn-sm" onclick="cancelarCFDI(${f.id},'${escQ(f.folio)}')">&#x274C; Cancelar</button>` : ''}
@@ -3023,7 +3283,7 @@ function showToast(msg, type) {
   window._toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
 }
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
 </body>
 </html>

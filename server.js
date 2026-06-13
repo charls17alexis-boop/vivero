@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const { getDB, initDatabase, query, queryOne, execute } = require('./database');
@@ -17,11 +18,28 @@ const SESSION_TTL = 24 * 60 * 60 * 1000; // 24h
 setInterval(() => { const now = Date.now(); for (const [k, v] of sessions) { if (v._expires < now) sessions.delete(k); } }, 60000);
 
 app.use(cors());
+app.use(helmet.contentSecurityPolicy({
+  useDefaults: false,
+  directives: {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net"],
+    scriptSrcAttr: ["'unsafe-inline'"],
+    styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+    fontSrc: ["'self'", "https://fonts.gstatic.com"],
+    imgSrc: ["'self'", "data:"],
+    connectSrc: ["'self'", "*.railway.app"],
+    formAction: ["'self'"],
+    frameAncestors: ["'none'"]
+  }
+}));
+app.use(helmet.referrerPolicy({ policy: 'strict-origin-when-cross-origin' }));
+app.use(helmet.noSniff());
+app.use(helmet.frameguard({ action: 'deny' }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 function authMiddleware(req, res, next) {
-  if (req.path === '/login' || req.path === '/register-public') return next();
+  if (req.path === '/login' || req.path === '/api/login' || req.path === '/register-public' || req.path === '/api/register-public') return next();
   let token = req.headers['x-auth-token'] || req.query.token;
   if (!token || !sessions.has(token)) return res.status(401).json({ error: 'No autorizado' });
   if (sessions.get(token)._expires < Date.now()) { sessions.delete(token); return res.status(401).json({ error: 'Sesión expirada' }); }
@@ -651,22 +669,29 @@ app.post('/api/ventas', requireRole('Administrador', 'Vendedor'), async (req, re
     const saldo = tv === 'Normal' ? 0 : total - ant;
     const estado = tv === 'Normal' ? 'Pagado' : 'Pendiente';
 
+    // === STOCK VALIDATION FIX: agrupar por producto_id ===
+    const grouped = {};
+    for (const p of productos) {
+      if (p.producto_tipo === 'planta') {
+        const key = p.producto_id;
+        grouped[key] = (grouped[key] || 0) + p.cantidad;
+      }
+    }
+    for (const [prodId, cantTotal] of Object.entries(grouped)) {
+      const planta = await queryOne('SELECT nombre, stock FROM plantas WHERE id = ? AND activo = 1', [Number(prodId)]);
+      if (!planta) return res.status(400).json({ error: 'Producto no encontrado' });
+      if (planta.stock < cantTotal) {
+        return res.status(400).json({ error: planta.nombre + ': solicitando ' + cantTotal + ' unidades pero solo hay ' + planta.stock + ' disponibles' });
+
+      }
+    }
+
     const folio = 'F-' + String(Date.now()).slice(-6);
     const r = await execute('INSERT INTO ventas (folio, cliente_id, total, metodo_pago, usuario_id, estado, tipo_venta, anticipo, saldo_pendiente, fecha_programada) VALUES (?,?,?,?,?,?,?,?,?,?)',
       [folio, cliente_id || null, total, metodo_pago || 'Efectivo', usuario_id || null, estado, tv, ant, saldo, fecha_programada || null]);
     const ventaId = r.lastId;
     const ticketNumber = 'TKT-' + String(ventaId).padStart(6, '0');
     await execute('UPDATE ventas SET ticket_number=? WHERE id=?', [ticketNumber, ventaId]);
-
-    for (const p of productos) {
-      if (p.producto_tipo === 'planta') {
-        const planta = await queryOne('SELECT stock FROM plantas WHERE id = ? AND activo = 1', [p.producto_id]);
-        if (!planta) return res.status(400).json({ error: 'Producto no encontrado: ' + p.producto_nombre });
-        if (planta.stock < p.cantidad) {
-          return res.status(400).json({ error: 'Stock insuficiente para ' + p.producto_nombre + ': disponible ' + planta.stock + ', solicitado ' + p.cantidad });
-        }
-      }
-    }
 
     for (const p of productos) {
       await execute('INSERT INTO ventas_detalle (venta_id, producto_tipo, producto_id, producto_nombre, cantidad, precio_unitario, subtotal) VALUES (?,?,?,?,?,?,?)',
@@ -707,6 +732,247 @@ app.put('/api/ventas/:id/abono', requireRole('Administrador', 'Vendedor'), async
     const nuevoEstado = nuevoSaldo <= 0 ? 'Pagado' : venta.estado;
     await execute('UPDATE ventas SET saldo_pendiente=?, estado=?, anticipo=anticipo+? WHERE id=?', [nuevoSaldo, nuevoEstado, parseFloat(monto || 0), req.params.id]);
     res.json({ success: true, saldo_pendiente: nuevoSaldo, estado: nuevoEstado });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ==================== ANTICIPOS (Apartados) ====================
+app.get('/api/anticipos', async (req, res) => {
+  try {
+    const data = await query(`
+      SELECT a.*, c.nombre as cliente_nombre, u.nombre as vendedor_nombre
+      FROM anticipos a LEFT JOIN clientes c ON a.cliente_id = c.id
+      LEFT JOIN usuarios u ON a.vendedor_id = u.id
+      ORDER BY a.created_at DESC
+    `);
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/anticipos/pendientes', async (req, res) => {
+  try {
+    const data = await query(`
+      SELECT a.*, c.nombre as cliente_nombre, u.nombre as vendedor_nombre
+      FROM anticipos a LEFT JOIN clientes c ON a.cliente_id = c.id
+      LEFT JOIN usuarios u ON a.vendedor_id = u.id
+      WHERE a.estado = 'pendiente'
+      ORDER BY a.fecha_limite ASC
+    `);
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/anticipos', requireRole('Administrador', 'Vendedor'), async (req, res) => {
+  try {
+    const { cliente_id, vendedor_id, productos, total_venta, monto_anticipo, fecha_limite, metodo_pago } = req.body;
+    const saldo_pendiente = total_venta - monto_anticipo;
+    const r = await execute('INSERT INTO anticipos (cliente_id, vendedor_id, productos, total_venta, monto_anticipo, saldo_pendiente, fecha_limite, metodo_pago, estado) VALUES (?,?,?,?,?,?,?,?,?)',
+      [cliente_id || null, vendedor_id || null, JSON.stringify(productos), total_venta, monto_anticipo, saldo_pendiente, fecha_limite, metodo_pago || 'Efectivo', 'pendiente']);
+    res.json({ success: true, id: r.lastId, saldo_pendiente });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/anticipos/:id/ticket', async (req, res) => {
+  try {
+    const a = await queryOne(`
+      SELECT a.*, c.nombre as cliente_nombre, u.nombre as vendedor_nombre
+      FROM anticipos a LEFT JOIN clientes c ON a.cliente_id = c.id
+      LEFT JOIN usuarios u ON a.vendedor_id = u.id
+      WHERE a.id = ?
+    `, [req.params.id]);
+    if (!a) return res.status(404).json({ error: 'Anticipo no encontrado' });
+
+    const doc = new PDFDocument({ margin: 30, size: '80mm', layout: 'portrait' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename=anticipo_' + a.id + '.pdf');
+    doc.pipe(res);
+
+    doc.fontSize(13).font('Helvetica-Bold').fillColor('#1b4332').text('VIVERO "EL VERDE"', { align: 'center' });
+    doc.fontSize(8).font('Helvetica').fillColor('#333').text('Comprobante de Anticipo (Apartado)', { align: 'center' });
+    doc.moveDown(0.3);
+    doc.moveTo(20, doc.y).lineTo(190, doc.y).strokeColor('#2d6a4f').stroke();
+    doc.moveDown(0.5);
+    doc.fontSize(9).font('Helvetica-Bold').text('Folio: A-' + String(a.id).padStart(6, '0'), { align: 'center' });
+    doc.moveDown(0.3);
+    doc.font('Helvetica').fontSize(8).fillColor('#333');
+    doc.text('Cliente: ' + (a.cliente_nombre || 'Público general'));
+    doc.text('Vendedor: ' + (a.vendedor_nombre || '—'));
+    doc.text('Fecha: ' + (a.created_at ? a.created_at.slice(0,10) : ''));
+    doc.text('Límite: ' + a.fecha_limite);
+    doc.moveDown(0.3);
+    doc.moveTo(20, doc.y).lineTo(190, doc.y).strokeColor('#ccc').stroke();
+    doc.moveDown(0.3);
+
+    const prods = JSON.parse(a.productos || '[]');
+    doc.font('Helvetica-Bold').fontSize(8).text('Productos apartados:');
+    doc.font('Helvetica').fontSize(8);
+    prods.forEach(p => {
+      doc.text(p.producto_nombre + ' x' + p.cantidad + '  $' + (p.cantidad * p.precio_unitario).toFixed(2));
+    });
+    doc.moveDown(0.5);
+    doc.moveTo(20, doc.y).lineTo(190, doc.y).strokeColor('#ccc').stroke();
+    doc.moveDown(0.3);
+
+    doc.fontSize(9);
+    doc.fillColor('#1b4332').font('Helvetica-Bold').text('Total venta: $' + a.total_venta.toFixed(2), { align: 'right' });
+    doc.fillColor('#2d6a4f').font('Helvetica-Bold').text('Anticipo recibido: $' + a.monto_anticipo.toFixed(2), { align: 'right' });
+    doc.fillColor('#c0392b').font('Helvetica-Bold').text('Saldo pendiente: $' + a.saldo_pendiente.toFixed(2), { align: 'right' });
+    doc.moveDown(0.3);
+    doc.fillColor('#666').font('Helvetica').fontSize(7).text('Pago: ' + a.metodo_pago, { align: 'center' });
+    doc.text('Válido hasta: ' + a.fecha_limite, { align: 'center' });
+
+    doc.end();
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/anticipos/:id/liquidar', requireRole('Administrador', 'Vendedor'), async (req, res) => {
+  try {
+    const { monto_restante, metodo_pago } = req.body;
+    const antic = await queryOne('SELECT * FROM anticipos WHERE id = ? AND estado = ?', [req.params.id, 'pendiente']);
+    if (!antic) return res.status(404).json({ error: 'Anticipo no encontrado o ya liquidado' });
+
+    const productos = JSON.parse(antic.productos || '[]');
+
+    // Validar stock antes de liquidar
+    const grouped = {};
+    for (const p of productos) grouped[p.producto_id] = (grouped[p.producto_id] || 0) + p.cantidad;
+    for (const [prodId, cantTotal] of Object.entries(grouped)) {
+      const planta = await queryOne('SELECT nombre, stock FROM plantas WHERE id = ? AND activo = 1', [Number(prodId)]);
+      if (!planta) return res.status(400).json({ error: 'Producto no encontrado' });
+      if (planta.stock < cantTotal) {
+        return res.status(400).json({ error: 'Stock insuficiente para liquidar ' + planta.nombre + ': disponible ' + planta.stock + ', requerido ' + cantTotal });
+      }
+    }
+
+    // Descontar stock
+    for (const p of productos) {
+      await execute('UPDATE plantas SET stock = stock - ? WHERE id = ?', [p.cantidad, p.producto_id]);
+    }
+
+    // Crear la venta completa
+    const folio = 'F-' + String(Date.now()).slice(-6);
+    const resto = parseFloat(monto_restante) || 0;
+    const totalFinal = antic.monto_anticipo + resto;
+    const r = await execute('INSERT INTO ventas (folio, cliente_id, total, metodo_pago, usuario_id, estado, tipo_venta, anticipo, saldo_pendiente) VALUES (?,?,?,?,?,?,?,?,?)',
+      [folio, antic.cliente_id, totalFinal, metodo_pago || 'Efectivo', antic.vendedor_id, 'Pagado', 'Normal', antic.monto_anticipo, 0]);
+    const ventaId = r.lastId;
+    const ticketNumber = 'TKT-' + String(ventaId).padStart(6, '0');
+    await execute('UPDATE ventas SET ticket_number=? WHERE id=?', [ticketNumber, ventaId]);
+
+    for (const p of productos) {
+      await execute('INSERT INTO ventas_detalle (venta_id, producto_tipo, producto_id, producto_nombre, cantidad, precio_unitario, subtotal) VALUES (?,?,?,?,?,?,?)',
+        [ventaId, 'planta', p.producto_id, p.producto_nombre, p.cantidad, p.precio_unitario, p.cantidad * p.precio_unitario]);
+    }
+
+    await execute("UPDATE anticipos SET estado = 'liquidado' WHERE id = ?", [req.params.id]);
+
+    res.json({ success: true, folio, venta_id: ventaId, ticket_number: ticketNumber, total: totalFinal });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/anticipos/:id/cancelar', requireRole('Administrador'), async (req, res) => {
+  try {
+    const { devolver_monto } = req.body;
+    await execute("UPDATE anticipos SET estado = 'cancelado' WHERE id = ?", [req.params.id]);
+    res.json({ success: true, devolver_monto: !!devolver_monto });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/anticipos/alertas', async (req, res) => {
+  try {
+    const hoy = new Date().toISOString().slice(0,10);
+    const vencidos = await query(`
+      SELECT a.*, c.nombre as cliente_nombre
+      FROM anticipos a LEFT JOIN clientes c ON a.cliente_id = c.id
+      WHERE a.estado = 'pendiente' AND a.fecha_limite < ?
+      ORDER BY a.fecha_limite ASC
+    `, [hoy]);
+    res.json(vencidos);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ==================== ABONOS A CRÉDITOS ====================
+app.get('/api/creditos/pendientes', async (req, res) => {
+  try {
+    const data = await query(`
+      SELECT v.id, v.folio, v.total, v.saldo_pendiente, c.nombre as cliente_nombre,
+        v.created_at,
+        (SELECT MIN(p.fecha_vencimiento) FROM pagos_credito p WHERE p.venta_id = v.id AND p.estado = 'pendiente') as proximo_pago,
+        (SELECT SUM(monto) FROM pagos_credito WHERE venta_id = v.id AND estado = 'pagado') as total_pagado
+      FROM ventas v LEFT JOIN clientes c ON v.cliente_id = c.id
+      WHERE v.tipo_venta = 'Credito' AND v.estado != 'Pagado' AND v.estado != 'Cancelado'
+      ORDER BY v.created_at DESC
+    `);
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/creditos/:id/abono', requireRole('Administrador', 'Vendedor'), async (req, res) => {
+  try {
+    const { monto, metodo_pago, fecha } = req.body;
+    const venta = await queryOne('SELECT * FROM ventas WHERE id = ? AND tipo_venta = ?', [req.params.id, 'Credito']);
+    if (!venta) return res.status(404).json({ error: 'Venta a crédito no encontrada' });
+
+    const montoNum = parseFloat(monto) || 0;
+    if (montoNum <= 0) return res.status(400).json({ error: 'Monto inválido' });
+    if (montoNum > venta.saldo_pendiente) return res.status(400).json({ error: 'El abono supera el saldo pendiente' });
+
+    const nuevoSaldo = venta.saldo_pendiente - montoNum;
+    const nuevoEstado = nuevoSaldo <= 0 ? 'Pagado' : venta.estado;
+
+    // Obtener número de pago
+    const countPagos = await queryOne("SELECT COUNT(*) as c FROM abonos_credito WHERE venta_id = ?", [req.params.id]);
+    const numPago = (countPagos.c || 0) + 1;
+
+    await execute('INSERT INTO abonos_credito (venta_id, monto, metodo_pago, fecha, numero_pago) VALUES (?,?,?,?,?)',
+      [req.params.id, montoNum, metodo_pago || 'Efectivo', fecha || new Date().toISOString().slice(0,10), numPago]);
+    await execute('UPDATE ventas SET saldo_pendiente = ?, estado = ? WHERE id = ?', [nuevoSaldo, nuevoEstado, req.params.id]);
+
+    // Si el crédito se liberó, actualizar credito_activo y saldo_actual del cliente
+    if (nuevoEstado === 'Pagado' && venta.cliente_id) {
+      await execute('UPDATE clientes SET saldo_actual = GREATEST(0, saldo_actual - ?) WHERE id = ?', [venta.total, venta.cliente_id]);
+    }
+
+    res.json({ success: true, saldo_pendiente: nuevoSaldo, estado: nuevoEstado, numero_pago: numPago });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/creditos/:id/abonos', async (req, res) => {
+  try {
+    const abonos = await query('SELECT * FROM abonos_credito WHERE venta_id = ? ORDER BY numero_pago ASC', [req.params.id]);
+    res.json(abonos);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/creditos/:id/ticket-abono', async (req, res) => {
+  try {
+    const { id_abono } = req.query;
+    const abono = await queryOne('SELECT a.*, v.folio, v.saldo_pendiente, c.nombre as cliente_nombre FROM abonos_credito a JOIN ventas v ON a.venta_id = v.id LEFT JOIN clientes c ON v.cliente_id = c.id WHERE a.id = ?', [Number(id_abono)]);
+    if (!abono) return res.status(404).json({ error: 'Abono no encontrado' });
+
+    const doc = new PDFDocument({ margin: 30, size: '80mm', layout: 'portrait' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename=abono_' + abono.id + '.pdf');
+    doc.pipe(res);
+
+    doc.fontSize(12).font('Helvetica-Bold').fillColor('#1b4332').text('VIVERO "EL VERDE"', { align: 'center' });
+    doc.fontSize(8).font('Helvetica').fillColor('#333').text('Comprobante de Abono — Crédito', { align: 'center' });
+    doc.moveDown(0.3);
+    doc.moveTo(20, doc.y).lineTo(190, doc.y).strokeColor('#2d6a4f').stroke();
+    doc.moveDown(0.5);
+    doc.fontSize(8);
+    doc.text('Cliente: ' + (abono.cliente_nombre || '—'));
+    doc.text('Folio venta: ' + abono.folio);
+    doc.text('Pago #' + abono.numero_pago);
+    doc.text('Fecha: ' + abono.fecha);
+    doc.moveDown(0.3);
+    doc.moveTo(20, doc.y).lineTo(190, doc.y).strokeColor('#ccc').stroke();
+    doc.moveDown(0.3);
+    doc.fillColor('#2d6a4f').font('Helvetica-Bold').fontSize(9).text('Monto abonado: $' + abono.monto.toFixed(2), { align: 'right' });
+    doc.fillColor('#666').font('Helvetica').fontSize(7).text('Método: ' + abono.metodo_pago, { align: 'right' });
+    doc.moveDown(0.5);
+    doc.fillColor('#c0392b').font('Helvetica-Bold').fontSize(9).text('Saldo restante: $' + (abono.saldo_pendiente || 0).toFixed(2), { align: 'right' });
+
+    doc.end();
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -192,6 +192,24 @@ if (!DATABASE_URL) {
       concepto TEXT NOT NULL, monto REAL NOT NULL DEFAULT 0, fecha TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now','localtime'))
     );
+    CREATE TABLE IF NOT EXISTS anticipos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cliente_id INTEGER, vendedor_id INTEGER,
+      productos TEXT NOT NULL, total_venta REAL NOT NULL DEFAULT 0,
+      monto_anticipo REAL NOT NULL DEFAULT 0, saldo_pendiente REAL NOT NULL DEFAULT 0,
+      fecha_limite TEXT NOT NULL, metodo_pago TEXT NOT NULL DEFAULT 'Efectivo',
+      estado TEXT NOT NULL DEFAULT 'pendiente',
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (cliente_id) REFERENCES clientes(id),
+      FOREIGN KEY (vendedor_id) REFERENCES usuarios(id)
+    );
+    CREATE TABLE IF NOT EXISTS abonos_credito (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, venta_id INTEGER NOT NULL,
+      monto REAL NOT NULL DEFAULT 0, metodo_pago TEXT NOT NULL DEFAULT 'Efectivo',
+      fecha TEXT NOT NULL, numero_pago INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE
+    );
   `;
 
   async function initDatabase() {
@@ -474,6 +492,22 @@ const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS costos_operacion (
     id SERIAL PRIMARY KEY, tipo TEXT NOT NULL CHECK (tipo IN ('directo','indirecto')),
     concepto TEXT NOT NULL, monto REAL NOT NULL DEFAULT 0, fecha TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+  );
+  CREATE TABLE IF NOT EXISTS anticipos (
+    id SERIAL PRIMARY KEY,
+    cliente_id INTEGER REFERENCES clientes(id),
+    vendedor_id INTEGER REFERENCES usuarios(id),
+    productos TEXT NOT NULL, total_venta REAL NOT NULL DEFAULT 0,
+    monto_anticipo REAL NOT NULL DEFAULT 0, saldo_pendiente REAL NOT NULL DEFAULT 0,
+    fecha_limite TEXT NOT NULL, metodo_pago TEXT NOT NULL DEFAULT 'Efectivo',
+    estado TEXT NOT NULL DEFAULT 'pendiente',
+    created_at TIMESTAMP DEFAULT NOW()
+  );
+  CREATE TABLE IF NOT EXISTS abonos_credito (
+    id SERIAL PRIMARY KEY, venta_id INTEGER NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
+    monto REAL NOT NULL DEFAULT 0, metodo_pago TEXT NOT NULL DEFAULT 'Efectivo',
+    fecha TEXT NOT NULL, numero_pago INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT NOW()
   );
 `;
